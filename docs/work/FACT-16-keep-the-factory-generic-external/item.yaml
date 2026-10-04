@@ -1,0 +1,11 @@
+id: FACT-16
+type: feature
+title: 'Keep the factory generic: external project registry'
+slug: keep-the-factory-generic-external
+status: draft
+risk: low
+jira: FACT-16
+branch: feature/fact-16-keep-the-factory-generic-external
+created: '2026-10-04'
+approvals: {}
+pr: null
