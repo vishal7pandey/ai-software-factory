@@ -1,0 +1,31 @@
+# Index of everything `factory adopt` / `factory sync` lays into a project.
+# Schema and modes: docs/ARCHITECTURE.md §3.1.  Paths in `src` are relative to the factory repo root.
+version: 1
+
+files:
+  - {src: kit/AGENTS.block.md,              dest: AGENTS.md,                            mode: block}
+  - {src: kit/CLAUDE.md,                    dest: CLAUDE.md,                            mode: create}
+  - {src: kit/copilot-instructions.md,      dest: .github/copilot-instructions.md,      mode: create}
+  - {src: kit/pull_request_template.md,     dest: .github/pull_request_template.md,     mode: create}
+  - {src: kit/CODEOWNERS.md,                dest: .github/CODEOWNERS,                   mode: create}
+  - {src: kit/ci/python.yml,                dest: .github/workflows/ci.yml,             mode: create, stack: python}
+  - {src: kit/ci/node.yml,                  dest: .github/workflows/ci.yml,             mode: create, stack: node}
+  - {src: kit/ci/generic.yml,               dest: .github/workflows/ci.yml,             mode: create, stack: [docs, other]}
+  - {src: kit/workflows/factory-verify.yml, dest: .github/workflows/factory-verify.yml, mode: managed}
+  - {src: src/swfactory/verify.py,          dest: .factory/verify.py,                   mode: managed}
+  - {src: kit/work/README.md,               dest: docs/work/README.md,                  mode: create}
+
+# Directories copied file-by-file, each file `managed`.
+dirs:
+  - {src: policies, dest: .factory/policies, mode: managed}
+
+# Skills are copied from skills/<name>/ into every target in factory.yaml › skill_targets, mode managed.
+skills: all
+
+# Work-item doc templates (used by `feature start` / `bug start`; not copied into projects as files —
+# they are rendered into docs/work/<id>-<slug>/).
+work_templates:
+  feature_spec: kit/work/spec.feature.md
+  bug_spec:     kit/work/spec.bug.md
+  plan:         kit/work/plan.md
+  test_plan:    kit/work/test-plan.md

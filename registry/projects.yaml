@@ -1,0 +1,22 @@
+# Committed registry. Machine-specific paths live in registry/local.yaml (gitignored).
+projects:
+  - name: ade
+    repo: github.com/vishal7pandey/adep
+    stack: python
+    tracker: {kind: jira, key: SCRUM}
+    autonomy: supervised
+    adopted: false
+
+  - name: chatpid
+    repo: github.com/vishal7pandey/chatpid
+    stack: python
+    tracker: {kind: jira, key: SCRUM}
+    autonomy: supervised
+    adopted: false
+
+  - name: ui-ux-design
+    repo: github.com/vishal7pandey/ui-ux-design-knowledge-base
+    stack: docs
+    tracker: {kind: none}
+    autonomy: supervised
+    adopted: false
