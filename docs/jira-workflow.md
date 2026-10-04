@@ -4,6 +4,21 @@ Jira tracks the work; the repo holds the evidence (`docs/work/`). `item.yaml` ca
 in `jira:` and the item id is the key (`PF-12`). Statuses are defined in
 [ARCHITECTURE.md §3.2](ARCHITECTURE.md); this page only maps them.
 
+## One project, one of everything
+
+Every project is fully separate: its **own Jira project, its own Confluence space, its own GitHub
+repo**, all sharing one short key. Nothing is shared between projects, so a project can be archived
+or deleted without touching the others. Record the key in `registry/projects.yaml`
+(`tracker.key`, `confluence.space`) and in the project's `.factory/factory.yaml`.
+
+Create-by-hand checklist for a new project (the factory CLI and agent tools cannot create Jira
+projects or Confluence spaces):
+
+1. Jira: Create project, Scrum template, key = the project key, name = the project name.
+2. Confluence: Create space, same key, same name.
+3. GitHub: `gh repo create <owner>/<name> --private` (when the project is ready to be pushed).
+4. `factory adopt <path> --tracker jira --jira-key <KEY>`, then fill the registry entry.
+
 ## Suggested Jira workflow
 
 | Jira status | Factory status | Meaning |
