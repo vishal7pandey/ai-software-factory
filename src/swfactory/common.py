@@ -63,7 +63,11 @@ def find_project_root(start: Path | str = ".") -> Path:
 
 def slugify(text: str, max_len: int = 40) -> str:
     s = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
-    return s[:max_len].strip("-") or "item"
+    if len(s) > max_len:
+        cut = s[:max_len]
+        # Prefer ending on a whole word, unless that would throw away most of the slug.
+        s = cut.rsplit("-", 1)[0] if "-" in cut[max_len // 2 :] else cut
+    return s.strip("-") or "item"
 
 
 def today() -> str:

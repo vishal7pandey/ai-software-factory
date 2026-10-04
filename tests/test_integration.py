@@ -94,3 +94,11 @@ def test_golden_path_gates_reject_scaffolds_and_pass_real_docs(app, capsys):
     r = sh(*verify, cwd=app)
     assert r.returncode == 0, r.stdout
     assert "verify: OK" in r.stdout
+
+
+def test_slugify_cuts_on_word_boundary():
+    slug = common.slugify("Add a greet command that prints a greeting for a given name")
+    assert slug == "add-a-greet-command-that-prints-a"
+    assert len(slug) <= 40
+    assert common.slugify("x" * 60) == "x" * 40  # no hyphen to cut on: hard cut
+    assert common.slugify("!!!") == "item"

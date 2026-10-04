@@ -231,7 +231,7 @@ def resolve_config(
         ),
         "tracker": _tracker(tracker, jira_key, ex.get("tracker")),
         "skill_targets": targets,
-        "environments": ex.get("environments") or {"dev": None, "prod": None},
+        "environments": ex.get("environments") or {"dev": None, "test": None, "prod": None},
         "managed": dict(managed),
     }
 

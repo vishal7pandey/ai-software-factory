@@ -12,6 +12,8 @@ uv run ruff check . && uv run ruff format --check .
 uv run factory lint        # validates skills + kit manifest
 ```
 
+On this Windows machine Application Control blocks `pytest.exe`; use `uv run python -m pytest -q`.
+
 ## Rules
 
 * Python ≥ 3.12, stdlib + PyYAML only. No new dependency without an ADR.
