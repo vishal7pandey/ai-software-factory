@@ -1,6 +1,6 @@
 # Committed registry. Machine-specific paths live in registry/local.yaml (gitignored).
 # One Jira project + one Confluence space + one GitHub repo per project (docs/jira-workflow.md).
-# Keys below are PLANNED: they do not exist in Jira/Confluence until created by hand.
+# Jira projects and Confluence spaces FACT, ADE, CPID were created 2026-10-04; each project is seeded as it adopts the factory.
 projects:
   - name: ai-software-factory
     repo: null            # local only for now
