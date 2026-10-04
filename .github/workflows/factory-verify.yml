@@ -1,0 +1,22 @@
+name: factory-verify
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml
+      - run: python .factory/verify.py --branch "$HEAD_REF"
+        env:
+          HEAD_REF: ${{ github.head_ref }}   # via env, not inline, to avoid script injection from branch names
