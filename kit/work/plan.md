@@ -1,6 +1,7 @@
 # {{id}} — {{title}}
 
 Status: draft · Risk: {{risk}} · Jira: {{jira}}
+<!-- factory:unfilled - delete this line when the document is really written; approval and verify refuse it -->
 Created: {{date}} · Slug: {{slug}} · Spec: spec.md
 
 <!--

@@ -42,6 +42,7 @@ description: Use when a defect must be investigated before it is fixed - a bug r
 - A short message: root cause in one sentence, blast radius, risk, and a request for the human to approve spec.md.
 
 ## Definition of done
+- The template's `<!-- factory:unfilled ... -->` line is deleted from `spec.md`. It marks a scaffold, and approval and verify refuse the file while it is present. Delete it only when every section is really written.
 
 - The bug is reproduced by an automated test or script, or the spec states plainly it is not reproduced and lists the data requested (then the item stays `draft`).
 - Root cause has `file:line` and evidence, and a symptom-only explanation was rejected.

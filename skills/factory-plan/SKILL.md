@@ -35,6 +35,7 @@ description: Use when a work item's spec is approved (status spec-approved) and 
 - Approval requested; `item.yaml` untouched.
 
 ## Definition of done
+- The template's `<!-- factory:unfilled ... -->` line is deleted from `plan.md`. It marks a scaffold, and approval and verify refuse the file while it is present. Delete it only when every section is really written.
 - Every AC id from `spec.md` is served by at least one task, and every task serves at least one AC (or is explicitly enabling work).
 - Tasks are ordered, small, each with a concrete `Verify by`, each naming real files.
 - Alternatives, data/API/migration impact, security and failure modes, rollout and rollback, and a size estimate are filled in.

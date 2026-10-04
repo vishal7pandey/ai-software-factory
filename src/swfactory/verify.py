@@ -87,6 +87,15 @@ def _read(path: Path) -> str:
 
 
 CLARIFY = "[NEEDS CLARIFICATION"
+UNFILLED = "factory:unfilled"  # sentinel line in scaffolded templates; deleted once really written
+
+
+def open_marker(text: str) -> str | None:
+    """Return the marker that shows a work doc is not finished, or None."""
+    for marker in (UNFILLED, CLARIFY):
+        if marker in text:
+            return marker
+    return None
 
 
 def _nonempty(path: Path) -> bool:
@@ -190,8 +199,8 @@ def _check_approvals_and_docs(item: dict, item_dir: Path, config: dict) -> list[
         for name in ("spec.md", "plan.md", "test-plan.md"):
             if not _nonempty(item_dir / name):
                 problems.append(f"status is {item['status']} but {name} is missing or empty")
-            elif CLARIFY in _read(item_dir / name):
-                problems.append(f"status is {item['status']} but {name} still has {CLARIFY}")
+            elif marker := open_marker(_read(item_dir / name)):
+                problems.append(f"status is {item['status']} but {name} still has {marker}")
     return problems
 
 

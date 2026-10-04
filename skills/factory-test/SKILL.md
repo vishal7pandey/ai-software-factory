@@ -53,6 +53,7 @@ description: Use when a work item is at status plan-approved and needs test-plan
 - A short message: framework found, any untestable ACs sent back, gaps found in audit.
 
 ## Definition of done
+- The template's `<!-- factory:unfilled ... -->` line is deleted from `test-plan.md`. It marks a scaffold, and approval and verify refuse the file while it is present. Delete it only when every section is really written.
 
 - Plan mode: every AC has a row; no blank cells; levels justified; conventions recorded; test-plan.md non-empty and free of the NEEDS CLARIFICATION marker, so `implementing` is allowed.
 - Audit mode: every row is `verified` with a real test location; each test was shown (or concretely argued) to fail when the behaviour breaks; full suite green; working tree clean of mutations.

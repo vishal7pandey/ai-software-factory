@@ -41,6 +41,7 @@ description: Use when a feature, enhancement or refactor idea exists and the wor
 - `item.yaml` unchanged (`status: draft`); approval requested from the human.
 
 ## Definition of done
+- The template's `<!-- factory:unfilled ... -->` line is deleted from `spec.md`. It marks a scaffold, and approval and verify refuse the file while it is present. Delete it only when every section is really written.
 - Every requirement maps to at least one numbered, testable acceptance criterion, including a failure path.
 - Non-goals, edge cases, assumptions and risks are written, not implied.
 - Zero NEEDS CLARIFICATION markers left in the file (so approval is not blocked).

@@ -18,6 +18,7 @@ import yaml
 
 from swfactory import __version__
 from swfactory import common as _common
+from swfactory import installer as _installer
 from swfactory.common import FactoryError
 
 OK, WARN, FAIL = "OK", "WARN", "FAIL"
@@ -363,10 +364,24 @@ def check_project(
         managed = {}
     drifted = 0
     for rel, recorded in managed.items():
-        f = project / str(rel)
+        # "<dest>#block" tracks the factory block inside a user-owned file, not a whole file.
+        dest, is_block = str(rel).removesuffix("#block"), str(rel).endswith("#block")
+        f = project / dest
         if not f.is_file():
             out.append(Finding(FAIL, str(rel), "managed file missing"))
-        elif _common.sha256_file(f) != recorded:
+            continue
+        if is_block:
+            raw = f.read_text(encoding="utf-8")
+            if _installer.BEGIN not in raw or _installer.END not in raw:
+                out.append(Finding(FAIL, str(rel), "factory block markers missing"))
+                continue
+            inner = raw[
+                raw.index(_installer.BEGIN) + len(_installer.BEGIN) : raw.index(_installer.END)
+            ]
+            current = _common.sha256_text(_common.normalise_newlines(inner).strip("\n"))
+        else:
+            current = _common.sha256_file(f)
+        if current != recorded:
             drifted += 1
             out.append(Finding(WARN, str(rel), "drifted - `factory sync` will conflict"))
     bad = sum(1 for r in out if r.name in {str(k) for k in managed})

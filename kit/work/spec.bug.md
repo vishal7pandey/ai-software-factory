@@ -1,6 +1,7 @@
 # {{id}} — {{title}}
 
 Status: draft · Risk: {{risk}} · Jira: {{jira}}
+<!-- factory:unfilled - delete this line when the document is really written; approval and verify refuse it -->
 
 <!--
 Filled by the factory-diagnose skill. Reproduce first, then find the root cause, then write this.

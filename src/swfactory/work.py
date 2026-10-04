@@ -11,14 +11,15 @@ from pathlib import Path
 from swfactory import common
 from swfactory.common import FactoryError
 from swfactory.verify import (
-    CLARIFY,
     ITEM_KEYS,
     JIRA_RE,
     RISKS,
     STATUSES,
+    UNFILLED,
     check_project,
     dir_id,
     load_item,
+    open_marker,
     required_approvals,
     validate_item,
 )
@@ -323,8 +324,11 @@ def cmd_status(show_all: bool, start: Path | str = ".") -> int:
 def _doc_ok(path: Path, label: str) -> None:
     if not path.is_file() or not path.read_text(encoding="utf-8-sig").strip():
         raise FactoryError(f"{label} is missing or empty")
-    if CLARIFY in path.read_text(encoding="utf-8-sig"):
-        raise FactoryError(f"{label} still contains '{CLARIFY}'; resolve open questions first")
+    marker = open_marker(path.read_text(encoding="utf-8-sig"))
+    if marker == UNFILLED:
+        raise FactoryError(f"{label} is still the scaffolded template ('{UNFILLED}' line present)")
+    if marker:
+        raise FactoryError(f"{label} still contains '{marker}'; resolve open questions first")
 
 
 def cmd_approve(ident: str, kind: str, yes: bool, start: Path | str = ".") -> int:
