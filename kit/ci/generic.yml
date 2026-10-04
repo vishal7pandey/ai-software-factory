@@ -1,0 +1,17 @@
+# Placeholder CI: only checks for whitespace errors. REPLACE the last step with your real build/test/lint.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: git diff --check

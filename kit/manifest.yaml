@@ -13,18 +13,19 @@ files:
   - {src: kit/ci/generic.yml,               dest: .github/workflows/ci.yml,             mode: create, stack: [docs, other]}
   - {src: kit/workflows/factory-verify.yml, dest: .github/workflows/factory-verify.yml, mode: managed}
   - {src: src/swfactory/verify.py,          dest: .factory/verify.py,                   mode: managed}
-  - {src: kit/work/README.md,               dest: docs/work/README.md,                  mode: create}
+  - {src: kit/work-README.md,               dest: docs/work/README.md,                  mode: create}
 
 # Directories copied file-by-file, each file `managed`.
 dirs:
   - {src: policies, dest: .factory/policies, mode: managed}
+  - {src: kit/work, dest: .factory/templates/work, mode: managed}   # templates only; README is below
 
 # Skills are copied from skills/<name>/ into every target in factory.yaml › skill_targets, mode managed.
 skills: all
 
 # Work-item doc templates (used by `feature start` / `bug start`; not copied into projects as files —
 # they are rendered into docs/work/<id>-<slug>/).
-work_templates:
+work_templates:   # resolved via the factory root by the CLI; in a project they live in .factory/templates/work/
   feature_spec: kit/work/spec.feature.md
   bug_spec:     kit/work/spec.bug.md
   plan:         kit/work/plan.md

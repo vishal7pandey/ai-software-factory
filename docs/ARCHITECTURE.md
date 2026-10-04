@@ -71,7 +71,8 @@ ai-software-factory/
 ├── .factory/
 │   ├── factory.yaml               project config + ledger of managed-file hashes
 │   ├── verify.py                  standalone copy of src/swfactory/verify.py (managed)
-│   └── policies/*.md              (managed)
+│   ├── policies/*.md              (managed)
+│   └── templates/work/*.md        work-item doc templates; skills read them here (managed)
 └── docs/work/
     ├── README.md                  (create-if-absent) explains the evidence convention
     └── <id>-<slug>/               one dir per work item (see 3.2)
@@ -125,6 +126,13 @@ pr: null                 # PR URL once opened
 * `draft → spec-approved`: human, `approve spec`. Blocked while `spec.md` is missing/empty or contains `[NEEDS CLARIFICATION`.
 * `spec-approved → plan-approved`: human, `approve plan`. Same blockers on `plan.md`.
 * everything after: `advance <id> <status>` (agent or human). `implementing` requires `test-plan.md` to exist.
+* **Who moves what.** `implementing` is set by the agent (`advance` or by hand) once `test-plan.md`
+  is written. With the plan approval waived (autonomy rule below) the agent moves
+  `spec-approved → plan-approved` itself via `advance`; otherwise only `approve plan` can.
+* **Amending after approval (graph rule).** If new information changes an approved `spec.md` or
+  `plan.md`, the agent amends it, records why in `notes.md`, and asks the human to re-run
+  `approve <id> spec|plan`. Re-approval is allowed at any status up to `in-review`; it refreshes
+  `approvals.<kind>` (new `by`/`at`) and never moves status backwards.
 * **Autonomy** (`factory.yaml › autonomy`): `supervised` (default) requires spec **and** plan approvals.
   `trusted` waives the plan approval for `risk: low` items only. Anything else is a config error.
   `verify` and `approve` both read this; the rule lives in one function (`required_approvals`).
@@ -135,7 +143,8 @@ pr: null                 # PR URL once opened
 
 1. Every `docs/work/*/item.yaml` parses and satisfies the schema (id matches dir prefix, enums valid).
 2. status ≥ `spec-approved` ⇒ `approvals.spec` present; ≥ `plan-approved` ⇒ `approvals.plan` present
-   (unless waived by autonomy rule); ≥ `implementing` ⇒ `spec.md`, `plan.md`, `test-plan.md` non-empty.
+   (unless waived by autonomy rule); ≥ `implementing` ⇒ `spec.md`, `plan.md`, `test-plan.md` non-empty and free of the
+   NEEDS CLARIFICATION marker (square-bracket form, see `factory-spec`).
 3. If `--branch` matches `feature/<id>-…` or `fix/<id>-…` the item must exist and be ≥ `implementing`
    (code is not allowed to ride on an unapproved spec). Branches prefixed `chore/`, `docs/`, `deps/`,
    or `main` are exempt.
@@ -162,7 +171,7 @@ stack: python                    # python | node | docs | other
 autonomy: supervised             # supervised | trusted
 tracker: {kind: jira, key: SCRUM}   # kind: jira | github | none ; key only for jira
 skill_targets: [.claude/skills, .github/skills]
-environments: {dev: null, prod: null}     # free-form URLs/notes, informational
+environments: {dev: null, test: null, prod: null}   # URLs/notes; null = skip that stage
 managed:                         # written by adopt/sync — path → sha256 of installed content
   .factory/verify.py: <sha256>
 ```
