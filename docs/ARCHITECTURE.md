@@ -45,7 +45,7 @@ ai-software-factory/
 ├── README.md
 ├── docs/            ARCHITECTURE.md (this), ROADMAP.md, decisions/ (ADRs), jira-workflow.md
 ├── skills/          the method — one dir per skill, SKILL.md inside   (source of truth)
-├── policies/        security / git / testing / production / autonomy  (copied into projects)
+├── policies/        security / git / testing / production / autonomy / findings  (copied into projects)
 ├── kit/             files laid into adopted projects; kit/manifest.yaml is the index
 │   ├── ci/          stack CI workflows            ├── workflows/  factory-verify.yml
 │   └── work/        work-item doc templates       └── *.md        AGENTS block, PR template, …
@@ -180,7 +180,8 @@ the mechanical parts, and that `factory-implement` keeps carrying the file-editi
 never inline scripts) and the explicit-staging rule (never `git add -A`).
 
 V1 skills: `factory-workflow` (router), `factory-spec`, `factory-plan`, `factory-implement`,
-`factory-test`, `factory-review`, `factory-diagnose`, `factory-release`.
+`factory-test`, `factory-review`, `factory-diagnose`, `factory-release`, and `factory-findings` (scanner
+alerts to tracked, fixed, scanner-confirmed closed Jira Bugs; policy `findings.md`).
 
 ### 3.5 `factory.yaml` (in the adopted project)
 

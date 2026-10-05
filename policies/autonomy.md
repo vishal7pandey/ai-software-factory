@@ -21,6 +21,7 @@ Mode is set in `.factory/factory.yaml › autonomy`.
 * Deleting files outside the scope of the work item.
 * Anything touching authentication, authorization, payments or personal data (PII).
 * Broadening scope beyond the approved spec.
+* Dismissing or resolving a scanner finding, and changing a repo's security settings (`findings.md`).
 * Any network call to a non-dev environment.
 
 ## NEVER
