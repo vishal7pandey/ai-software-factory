@@ -54,7 +54,7 @@ def no_project_commands(monkeypatch, request):
 
 @pytest.fixture(autouse=True)
 def no_real_gh(monkeypatch):
-    """`factory harden`, `doctor` and `adopt` talk to GitHub through `harden.gh_api`. The suite never
-    reaches the network: the one function that starts `gh` answers "gh unusable" (FACT-33). A test
-    that wants GitHub answers passes its own runner or monkeypatches `harden.gh_api`."""
+    """`factory harden`, `doctor` and `adopt` talk to GitHub through `harden.gh_api`. The suite
+    never reaches the network: the one function that starts `gh` answers "gh unusable" (FACT-33).
+    A test that wants GitHub answers passes its own runner or monkeypatches `harden.gh_api`."""
     monkeypatch.setattr(harden, "_run_gh", lambda argv, stdin: (127, ""))
