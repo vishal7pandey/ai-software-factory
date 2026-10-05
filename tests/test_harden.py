@@ -171,6 +171,155 @@ def test_state_private_repo_without_the_feature_is_not_available():
     assert harden.read_state("me", "proj", gh).get(harden.CODEQL).state == harden.UNKNOWN
 
 
+# --- apply ----------------------------------------------------------------------------------------
+
+SECRET_WRITE = (
+    "PATCH",
+    BASE,
+    {
+        "security_and_analysis": {
+            "secret_scanning": {"status": "enabled"},
+            "secret_scanning_push_protection": {"status": "enabled"},
+        }
+    },
+)
+ALERTS_WRITE = ("PUT", f"{BASE}/vulnerability-alerts", None)
+UPDATES_WRITE = ("PUT", f"{BASE}/automated-security-fixes", None)
+CODEQL_WRITE = (
+    "PATCH",
+    f"{BASE}/code-scanning/default-setup",
+    {"state": "configured", "query_suite": "default"},
+)
+
+
+@pytest.fixture
+def proj(tmp_path):
+    return git_repo(tmp_path / "proj", "https://github.com/me/proj.git")
+
+
+def test_apply_issues_exactly_the_expected_writes(proj):
+    gh = FakeGh(secret=False, alerts=False, updates=False, codeql=False)
+    lines, code = harden.run(proj, gh=gh)
+    assert gh.writes == [SECRET_WRITE, ALERTS_WRITE, UPDATES_WRITE, CODEQL_WRITE]
+    assert code == 0
+    assert [ln.split()[0] for ln in lines[1:5]] == ["enabled"] * 4
+    assert lines[-1] == "harden: 4 enabled, 0 already on, 0 not available, 0 failed"
+
+
+def test_apply_skips_what_is_already_on(proj):
+    gh = FakeGh(alerts=False, codeql=False)
+    lines, code = harden.run(proj, gh=gh)
+    assert gh.writes == [ALERTS_WRITE, CODEQL_WRITE]
+    assert code == 0
+    assert lines[1].startswith("ok") and "already on" in lines[1]
+    assert lines[-1].startswith("harden: 2 enabled, 2 already on")
+
+
+def test_apply_with_everything_on_writes_nothing(proj):
+    gh = FakeGh()
+    lines, code = harden.run(proj, gh=gh)
+    assert gh.writes == [] and code == 0
+    assert sum("already on" in ln for ln in lines[1:5]) == 4
+    assert lines[-1] == "harden: 0 enabled, 4 already on, 0 not available, 0 failed"
+
+
+def test_push_protection_alone_off_still_writes_the_secret_scanning_call(proj):
+    gh = FakeGh(push=False)
+    harden.run(proj, gh=gh)
+    assert gh.writes == [SECRET_WRITE]
+
+
+def test_one_failure_does_not_stop_the_others_and_leaks_no_body(proj, capsys):
+    gh = FakeGh(
+        secret=False,
+        alerts=False,
+        updates=False,
+        codeql=False,
+        fail={("PATCH", "/code-scanning/default-setup"): 403},
+    )
+    lines, code = harden.run(proj, gh=gh)
+    assert gh.writes == [SECRET_WRITE, ALERTS_WRITE, UPDATES_WRITE, CODEQL_WRITE]
+    assert code == 1
+    assert lines[4].startswith("FAILED") and lines[4].endswith("HTTP 403")
+    assert [ln.split()[0] for ln in lines[1:4]] == ["enabled"] * 3
+    assert MARKER not in "\n".join(lines)
+
+
+def test_failure_of_the_first_write_still_attempts_the_rest(proj):
+    gh = FakeGh(secret=False, alerts=False, fail={("PATCH", BASE): 500})
+    lines, code = harden.run(proj, gh=gh)
+    assert gh.writes == [SECRET_WRITE, ALERTS_WRITE]
+    assert code == 1 and lines[1].endswith("HTTP 500")
+
+
+def test_private_repo_403_is_not_available_and_not_a_failure(proj):
+    gh = FakeGh(private=True, codeql=False, fail={("PATCH", "/code-scanning/default-setup"): 403})
+    lines, code = harden.run(proj, gh=gh)
+    assert code == 0
+    assert "not available" in lines[4] and "HTTP 403" in lines[4]
+    assert lines[-1].startswith("harden: 0 enabled, 3 already on, 1 not available, 0 failed")
+    assert MARKER not in "\n".join(lines)
+
+
+@pytest.mark.parametrize("status", [404, 422])
+def test_private_repo_404_and_422_behave_like_403(proj, status):
+    gh = FakeGh(
+        private=True, codeql=False, fail={("PATCH", "/code-scanning/default-setup"): status}
+    )
+    lines, code = harden.run(proj, gh=gh)
+    assert code == 0 and f"HTTP {status}" in lines[4] and "not available" in lines[4]
+
+
+def test_private_repo_500_is_still_a_failure(proj):
+    gh = FakeGh(private=True, codeql=False, fail={("PATCH", "/code-scanning/default-setup"): 500})
+    lines, code = harden.run(proj, gh=gh)
+    assert code == 1 and lines[4].startswith("FAILED") and "HTTP 500" in lines[4]
+
+
+def test_apply_refuses_when_the_repository_cannot_be_read(proj):
+    gh = FakeGh()
+    with pytest.raises(FactoryError, match="gh auth status"):
+        harden.run(proj, gh=lambda m, p, b=None: (0, None))
+    assert gh.calls == []
+
+
+def test_apply_with_a_401_names_the_status(proj):
+    with pytest.raises(FactoryError, match="HTTP 401"):
+        harden.run(proj, gh=lambda m, p, b=None: (401, {"message": MARKER}))
+
+
+# --- dry run --------------------------------------------------------------------------------------
+
+
+def test_dry_run_issues_no_write_and_lists_the_calls(proj):
+    gh = FakeGh(secret=False, alerts=False, updates=False, codeql=False)
+    lines, code = harden.run(proj, dry_run=True, gh=gh)
+    assert gh.writes == [] and code == 0
+    text = "\n".join(lines)
+    assert f"PUT {BASE}/vulnerability-alerts" in text
+    assert f"PUT {BASE}/automated-security-fixes" in text
+    assert '"query_suite": "default"' in text and '"state": "configured"' in text
+    assert "secret_scanning_push_protection" in text
+    assert (
+        lines[-1].startswith("harden (dry-run): 4 would be enabled")
+        and "nothing was changed" in lines[-1]
+    )
+
+
+def test_dry_run_with_everything_on_has_nothing_to_do(proj):
+    gh = FakeGh()
+    lines, code = harden.run(proj, dry_run=True, gh=gh)
+    assert gh.writes == [] and code == 0
+    assert lines[-1].startswith("harden (dry-run): 0 would be enabled, 4 already on")
+
+
+def test_dry_run_with_gh_unusable_prints_the_plan_with_unknown_states(proj):
+    lines, code = harden.run(proj, dry_run=True, gh=lambda m, p, b=None: (0, None))
+    assert code == 0
+    assert lines[0] == "me/proj (visibility unknown)"
+    assert sum("state unknown" in ln for ln in lines) == 4
+
+
 # --- owner/repo from the git remote ---------------------------------------------------------------
 
 

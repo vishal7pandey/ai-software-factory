@@ -173,6 +173,114 @@ def read_state(owner: str, repo: str, gh: Gh) -> RepoState:
     return RepoState(owner, repo, private, tuple(out))
 
 
+# --- plan and apply -------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Call:
+    method: str
+    path: str
+    body: dict | None = None
+
+    def text(self) -> str:
+        return f"{self.method} {self.path}" + (f" {json.dumps(self.body)}" if self.body else "")
+
+
+def write_call(key: str, owner: str, repo: str) -> Call:
+    """The one API call that turns a protection on."""
+    base = f"repos/{owner}/{repo}"
+    if key == SECRET:
+        body = {
+            "security_and_analysis": {
+                "secret_scanning": {"status": "enabled"},
+                "secret_scanning_push_protection": {"status": "enabled"},
+            }
+        }
+        return Call("PATCH", base, body)
+    if key == ALERTS:
+        return Call("PUT", f"{base}/vulnerability-alerts")
+    if key == UPDATES:
+        return Call("PUT", f"{base}/automated-security-fixes")
+    if key == CODEQL:
+        body = {"state": "configured", "query_suite": "default"}
+        return Call("PATCH", f"{base}/code-scanning/default-setup", body)
+    raise ValueError(key)
+
+
+# What happened to one protection.
+ON, WOULD, ENABLED, NA, FAILED = "ok", "would", "enabled", "n/a", "FAILED"
+
+
+@dataclass(frozen=True)
+class Outcome:
+    key: str
+    result: str  # ON | WOULD | ENABLED | NA | FAILED
+    detail: str = ""
+
+    def line(self) -> str:
+        return f"{self.result:<8}{LABELS[self.key]:<36}{self.detail}".rstrip()
+
+
+def _ok(status: int) -> bool:
+    return 200 <= status < 300
+
+
+def harden_repo(state: RepoState, gh: Gh, *, dry_run: bool) -> list[Outcome]:
+    """Bring every protection that is not on to on. A failure of one never stops the others.
+
+    Messages carry the HTTP status only; the response body of a write is never looked at."""
+    out: list[Outcome] = []
+    for key in KEYS:
+        current = state.get(key)
+        if current.state == OK:
+            out.append(Outcome(key, ON, "already on"))
+            continue
+        if current.state == UNAVAILABLE:
+            out.append(Outcome(key, NA, f"not available for this repository ({current.detail})"))
+            continue
+        call = write_call(key, state.owner, state.repo)
+        if dry_run:
+            why = f"  [state unknown: {current.detail}]" if current.state == UNKNOWN else ""
+            out.append(Outcome(key, WOULD, call.text() + why))
+            continue
+        status, _ = gh(call.method, call.path, call.body)
+        if _ok(status):
+            out.append(Outcome(key, ENABLED))
+        elif status == 0:
+            out.append(Outcome(key, FAILED, "gh unavailable"))
+        elif state.private and status in _NOT_AVAILABLE:
+            out.append(Outcome(key, NA, f"not available for this repository (HTTP {status})"))
+        else:
+            out.append(Outcome(key, FAILED, f"HTTP {status}"))
+    return out
+
+
+def summary(outcomes: list[Outcome], *, dry_run: bool) -> str:
+    n = {r: sum(o.result == r for o in outcomes) for r in (ON, WOULD, ENABLED, NA, FAILED)}
+    tail = f"{n[ON]} already on, {n[NA]} not available, {n[FAILED]} failed"
+    if dry_run:
+        return f"harden (dry-run): {n[WOULD]} would be enabled, {tail}; nothing was changed"
+    return f"harden: {n[ENABLED]} enabled, {tail}"
+
+
+def run(root: Path | str, *, dry_run: bool = False, gh: Gh | None = None) -> tuple[list[str], int]:
+    """Lines to print and the exit code (1 when a protection failed). Raises FactoryError when the
+    project has no GitHub remote or, when applying, the repository settings cannot be read."""
+    gh = gh or gh_api
+    owner, repo = repo_slug(root)
+    state = read_state(owner, repo, gh)
+    if state.private is None and not dry_run:
+        raise FactoryError(
+            f"cannot read the settings of {owner}/{repo} ({state.protections[0].detail}); "
+            "is `gh` installed and logged in with repo access (`gh auth status`)?"
+        )
+    visibility = {None: "visibility unknown", True: "private", False: "public"}[state.private]
+    outcomes = harden_repo(state, gh, dry_run=dry_run)
+    lines = [f"{owner}/{repo} ({visibility})", *(o.line() for o in outcomes)]
+    lines.append(summary(outcomes, dry_run=dry_run))
+    return lines, 1 if any(o.result == FAILED for o in outcomes) else 0
+
+
 def repo_slug(root: Path | str) -> tuple[str, str]:
     """(owner, repo) from the project's `origin` remote; the host must be github.com."""
     url = installer._git_remote(Path(root))
