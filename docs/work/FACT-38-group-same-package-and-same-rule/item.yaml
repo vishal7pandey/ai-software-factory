@@ -2,7 +2,7 @@ id: FACT-38
 type: feature
 title: Group same-package and same-rule findings into one issue
 slug: group-same-package-and-same-rule
-status: plan-approved
+status: implementing
 risk: medium
 jira: FACT-38
 branch: feature/fact-38-group-same-package-and-same-rule

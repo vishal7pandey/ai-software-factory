@@ -28,7 +28,7 @@ description: Use when starting or resuming ANY engineering task in a repo that h
    | Refactor | No dedicated skill. `type: feature`; spec = goal + constraints + risk assessment + criteria of the form "behaviour X is unchanged" (name the tests that pin it); then `factory-plan` as usual |
    | Production incident | Mitigate first (rollback, flag off, scale — per `production.md`); record what you did in `notes.md`; then open a bug item and take the bug path |
    | Security finding | Validate it is real and reachable, assess impact and exposure, then bug path; `risk: high`; `factory-review` must include a security pass |
-   | Scanner findings (open code scanning, Dependabot, secret scanning or SonarQube alerts; a PR with a new alert) | `factory-findings` lists and tracks them (one Jira Bug each, label `finding`), then each takes the bug path; closure rule below |
+   | Scanner findings (open code scanning, Dependabot, secret scanning or SonarQube alerts; a PR with a new alert) | `factory-findings` lists and tracks them (one Jira Bug per group of same-package or same-rule alerts, else per alert; label `finding`), then each takes the bug path; closure rule below |
    | Chore / docs / deps | Exempt, see below |
 
 4. **Exempt chores.** No work item, branch `chore/…`, `docs/…` or `deps/…`, only when ALL hold: tiny (roughly < 50 lines changed), no change to runtime behaviour, no schema/API/config-semantics change, no auth/security-relevant change, CI is green. Examples: typo and README fixes, comment edits, patch-level dependency bumps with unchanged tests. A dependency bump that needs code changes or touches auth/crypto is not a chore: make it an item. If in doubt, make it an item.
@@ -67,5 +67,5 @@ description: Use when starting or resuming ANY engineering task in a repo that h
 - Never start implementing before the required approvals are in `item.yaml` (both under `supervised`; spec only for a `trusted` `risk: low` item), or skip `factory-test` before `implementing`.
 - Never make any step depend on the CLI being installed; every CLI action has a by-hand equivalent.
 - Never classify as an exempt chore to avoid writing a spec.
-- Closure rule: never move a Jira issue labelled `finding` to Done unless the scanner, re-queried, reports the alert `fixed` (SonarQube: closed; a revoked secret; or a dismissal the human approved). An open alert never allows Done; a merged PR is not evidence (`.factory/policies/findings.md`).
+- Closure rule: never move a Jira issue labelled `finding` to Done unless the scanner, re-queried, reports every alert the issue carries `fixed` (SonarQube: closed; a revoked secret; or a dismissal the human approved); a grouped issue closes only when all of its alerts do. An open alert never allows Done; a merged PR is not evidence (`.factory/policies/findings.md`).
 - Never leave an invalidated spec or plan in place while coding on; amend it and ask for re-approval.
