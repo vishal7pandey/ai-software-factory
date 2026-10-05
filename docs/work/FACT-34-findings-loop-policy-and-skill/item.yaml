@@ -1,0 +1,19 @@
+id: FACT-34
+type: feature
+title: Findings loop policy and skill
+slug: findings-loop-policy-and-skill
+status: plan-approved
+risk: medium
+jira: FACT-34
+branch: feature/fact-34-findings-loop-policy-and-skill
+created: '2026-10-05'
+approvals:
+  spec:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-05'
+    delegated: true
+  plan:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-05'
+    delegated: true
+pr: null
