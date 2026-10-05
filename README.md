@@ -19,6 +19,8 @@ uv sync
 uv run factory doctor                        # are my tools ready?
 uv run factory adopt ../my-project --dry-run # findings + what would be added (runs no project command)
 uv run factory adopt ../my-project           # also runs the generated CI's commands locally; --no-check skips
+uv run factory harden ../my-project --dry-run  # secret scanning, Dependabot, CodeQL on its GitHub repo: the plan
+uv run factory harden ../my-project            # apply it (uses your `gh` login; idempotent)
 cd ../my-project
 uv run --project ../ai-software-factory factory feature start "Add Google login" --jira PF-12
 ```

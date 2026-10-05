@@ -9,7 +9,7 @@ import sys
 from swfactory import __version__
 from swfactory.common import FactoryError
 
-COMMAND_MODULES = ["install", "doctor", "lint", "work"]
+COMMAND_MODULES = ["install", "doctor", "harden", "lint", "work"]
 
 
 def build_parser() -> argparse.ArgumentParser:

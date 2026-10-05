@@ -11,12 +11,16 @@ def run(args: argparse.Namespace) -> int:
     findings: list[checks.Finding] = []
     if args.path:
         findings += checks.check_project(args.path)
+        adopted = checks.adopted_root(args.path)
+        if adopted:  # a path that is not an adopted project already FAILed above: no network then
+            findings += checks.check_protections(adopted)
     else:
         findings += checks.check_tools()
         root = checks.adopted_root(".")
         if root:
             findings.append(checks.Finding(checks.OK, "project", str(root)))
             findings += checks.check_project(root)
+            findings += checks.check_protections(root)
     for line in checks.format_findings(findings):
         print(line)
     fails = len(checks.failures(findings))
