@@ -23,7 +23,7 @@ managed:
   .factory/policies/autonomy.md: 27465a6d14bb56aa55b932bc8b22706ae01310b531b2b48a42f294849bc51389
   .factory/policies/git.md: 6d03d37a0c6587e0bb023bd6c45834eca1a5779d829c32befce4b3327d0f56e3
   .factory/policies/production.md: c7a8ed7eb37f06d81c0f08e73bd7def1e103274b7b731bcdddeb945b2a380f08
-  .factory/policies/security.md: bd62de9dd95d9ec8c8d6538fbff927c45f05d621af447d88a974a6690729fb61
+  .factory/policies/security.md: ed55dcff17224f564d595b4ae5944b424217f3ed0d28837a53147980c43132ca
   .factory/policies/testing.md: 6214c8f514483a7614f9942403f3f363ca7f1d1b2790fcb4cd4c5a3790c6c136
   .factory/templates/work/plan.md: e54cdb143d25caf2d362377b09dc489b77efd2f726203512caa86297e5adedb6
   .factory/templates/work/spec.bug.md: 3fb67e255b545219614092c973e6d7caa73b493760bf7cf6dfa8931276ea8bdd

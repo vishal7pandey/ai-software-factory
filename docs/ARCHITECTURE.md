@@ -215,15 +215,18 @@ a `registry/` directory appears in the repo or an Atlassian cloud site hostname 
 ### 3.7 CLI surface
 
 Python ≥ 3.12, argparse, entry point `factory` (`uv run factory …`). Every command: exit 0 ok, 1 user
-error (`FactoryError`, message to stderr), 2 usage. No command may require network except where noted.
+error (`FactoryError`, message to stderr), 2 usage. No command may require network except where noted:
+`harden`, and the read-only reads of `doctor <project>` and `adopt`, call the GitHub API through `gh`
+(3.8).
 
 | command | owner module | purpose |
 |---|---|---|
-| `adopt <path> [--stack] [--tracker] [--jira-key] [--autonomy] [--dry-run] [--no-check]` | `commands/install.py` | lay the kit into a project; register it. Project-aware: prints findings (default branch, existing CI triggers, commands section), inserts a commands TODO above a new AGENTS.md block, points a new CI at the default branch and drops CI steps that fail locally (`--no-check` skips running them; `--dry-run` never does). `adopt_inspect.py` |
+| `adopt <path> [--stack] [--tracker] [--jira-key] [--autonomy] [--dry-run] [--no-check]` | `commands/install.py` | lay the kit into a project; register it. Project-aware: prints findings (default branch, existing CI triggers, commands section), inserts a commands TODO above a new AGENTS.md block, points a new CI at the default branch and drops CI steps that fail locally (`--no-check` skips running them; `--dry-run` never does). Ends with the `harden` dry-run plan and the command to apply it (3.8). `adopt_inspect.py` |
 | `sync [path] [--force] [--dry-run] [--check]` | `commands/install.py` | refresh managed files; report conflicts/drift. `--check` writes nothing and exits 1 if a managed file is stale or missing |
 | `new <name> --stack python [--dir]` | `commands/install.py` | copy `templates/<stack>`, `git init`, adopt |
 | `project list\|add\|remove` | `commands/install.py` | registry |
-| `doctor [path]` | `commands/doctor.py` | tools present (git, gh, uv, node, docker, claude); gh auth; for a project: drift/missing kit files |
+| `doctor [path]` | `commands/doctor.py` | tools present (git, gh, uv, node, docker, claude); gh auth; for a project: drift/missing kit files and the four repo protections (3.8); exits 1 when one is `off` on a public repo |
+| `harden [path] [--dry-run]` | `commands/harden.py` → `swfactory/harden.py` | enable secret scanning + push protection, Dependabot alerts and security updates, CodeQL default setup on the project's GitHub repo (3.8) |
 | `lint` | `commands/lint.py` | validate skills + kit manifest in the factory repo |
 | `feature start <title> [--jira KEY] [--risk] [--no-branch] [--run AGENT]` | `commands/work.py` | scaffold work item + branch + handoff prompt |
 | `bug start <title> …` | `commands/work.py` | same, bug templates |
@@ -234,6 +237,30 @@ error (`FactoryError`, message to stderr), 2 usage. No command may require netwo
 | `verify [...]` | `commands/work.py` → `swfactory/verify.py` | the CI gate (3.3) |
 
 Shared helpers live in `swfactory/common.py`. Command modules expose `register(subparsers)`.
+
+### 3.8 Repository protections (`harden`, FACT-33)
+
+A GitHub-hosted project should have four protections on: **secret scanning with push protection**,
+**Dependabot alerts**, **Dependabot security updates** and **CodeQL default setup**. They are repository
+settings, not files, so they cannot be laid in by `adopt` and nothing in git would show them going off.
+
+* The repo is the project's `origin` remote (`github.com/<owner>/<repo>`); any other host is an error for
+  `harden` and a skipped line for `doctor`.
+* All GitHub access goes through one function, `swfactory.harden.gh_api(method, path, body)`, which runs
+  `gh api -i` (the user's own `gh` login; the factory never reads a token) and returns the HTTP status and
+  the parsed JSON. Tests replace it; the suite cannot reach the network.
+* `harden` reads each state first (GET), then writes only what is not on, in this order:
+  `PATCH repos/{o}/{r}` (`security_and_analysis`: `secret_scanning` and `secret_scanning_push_protection`
+  `enabled`), `PUT .../vulnerability-alerts`, `PUT .../automated-security-fixes`,
+  `PATCH .../code-scanning/default-setup` (`state: configured`, `query_suite: default`). `--dry-run` prints
+  these calls and issues no write; re-running with everything on writes nothing.
+* One protection failing does not stop the others. A failure is reported as `HTTP <status>` only, never the
+  response body. On a private repo a 403/404/422 means the plan has no such feature and is reported
+  `not available`, which is not a failure. Exit 1 when any protection failed.
+* `doctor <project>` shows each protection as `ok`, `off`, `unknown` (gh unusable, no admin) or
+  `not available`, and exits 1 when one is `off` on a **public** repo (a warning on a private one).
+  A project without a github.com remote gets one `skipped` line.
+* `adopt` ends by printing the dry-run plan and `factory harden <path>`; it never changes a setting itself.
 
 ## 4. Golden path
 
