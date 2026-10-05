@@ -167,6 +167,42 @@ def test_skill_dir_without_skill_md(tmp_path):
     assert has(reasons(tmp_path), "SKILL.md is missing")
 
 
+EDIT_RULE = "Never rewrite files with inline scripts.\n"
+STAGE_RULE = "Never stage with git add -A.\n"
+
+
+def implement_skill(*rules: str) -> str:
+    return skill_text(name="factory-implement", extra="docs/work/\n" + "".join(rules))
+
+
+def test_implement_skill_must_carry_editing_rules(tmp_path):
+    put_skill(tmp_path, "factory-implement", implement_skill(EDIT_RULE, STAGE_RULE))
+    assert reasons(tmp_path) == []
+
+    put_skill(tmp_path, "factory-implement", implement_skill(STAGE_RULE))
+    missing = reasons(tmp_path)
+    assert has(missing, "missing required rule: file-editing hazard") and len(missing) == 1
+
+    put_skill(tmp_path, "factory-implement", implement_skill(EDIT_RULE))
+    missing = reasons(tmp_path)
+    assert has(missing, "missing required rule: explicit-staging") and len(missing) == 1
+
+    # only the named skill is subject to the rule
+    put_skill(tmp_path, "factory-implement", implement_skill(EDIT_RULE, STAGE_RULE))
+    put_skill(tmp_path)  # factory-demo, no rules
+    assert reasons(tmp_path) == []
+
+
+def test_repo_implement_skill_carries_the_editing_rules():
+    text = (common.FACTORY_ROOT / "skills" / "factory-implement" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    assert (
+        "inline scripts" in text and "git add -A" in text and "re-read every changed line" in text
+    )
+    assert [f for f in checks.lint_skills(common.FACTORY_ROOT) if f.level == checks.FAIL] == []
+
+
 # --- manifest -----------------------------------------------------------------------------------
 
 
