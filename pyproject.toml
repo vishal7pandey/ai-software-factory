@@ -23,6 +23,7 @@ dev = ["pytest>=8", "ruff>=0.6"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["real_runner: use the real command runner of adopt (spawns a trivial command)"]
 
 [tool.ruff]
 line-length = 100

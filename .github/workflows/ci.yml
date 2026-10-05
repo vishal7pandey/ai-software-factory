@@ -23,3 +23,4 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run pytest -q
       - run: uv run factory lint
+      - run: uv run factory sync --check

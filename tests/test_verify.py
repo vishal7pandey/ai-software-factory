@@ -282,8 +282,41 @@ def test_main_output_and_exit_codes(tmp_path, capsys):
     assert capsys.readouterr().out.splitlines() == ["verify: OK"]
 
 
-def test_changed_files_from_is_accepted_and_ignored(tmp_path):
-    assert verify.main(["--root", str(tmp_path), "--changed-files-from", "nope.txt"]) == 0
+def test_docs_only_changed_files(tmp_path, capsys):
+    write_item(tmp_path, make_item(status="draft"))
+    branch = "feature/f-001-add-login"
+    strict = check_project(tmp_path, branch)
+    assert any("must be implementing or later" in p for p in strict)  # no list: unchanged
+
+    docs = ["docs/work/F-001-add-login/spec.md", "./docs/work/F-001-add-login/item.yaml"]
+    assert check_project(tmp_path, branch, docs) == []
+    assert check_project(tmp_path, branch, []) == []  # nothing changed: nothing rides on the spec
+    assert check_project(tmp_path, branch, [*docs, "src/app.py"]) == strict
+    assert (
+        check_project(tmp_path, branch, ["docs/work-notes/x.md"]) == strict
+    )  # prefix, not substring
+    windows = ["docs\\work\\F-001-add-login\\spec.md"]
+    assert check_project(tmp_path, branch, windows) == []
+
+    # a docs-only branch still needs its item
+    assert any("no valid work item" in p for p in check_project(tmp_path, "feature/f-009-x", docs))
+
+    # through the CLI: the file of changed paths
+    lst = tmp_path / "changed.txt"
+
+    def cli(listfile) -> int:
+        argv = ["--root", str(tmp_path), "--branch", branch, "--changed-files-from", str(listfile)]
+        return verify.main(argv)
+
+    lst.write_text("\n".join(docs) + "\n", encoding="utf-8")
+    assert cli(lst) == 0
+    lst.write_text("src/app.py\n", encoding="utf-8")
+    assert cli(lst) == 1
+    assert "must be implementing or later" in capsys.readouterr().out
+    lst.write_text("", encoding="utf-8")
+    assert cli(lst) == 0
+    # an unreadable list is not trusted: the strict rule applies
+    assert cli(tmp_path / "nope.txt") == 1
 
 
 def test_branch_defaults_to_current_git_branch(tmp_path, capsys):

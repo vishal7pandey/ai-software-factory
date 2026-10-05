@@ -204,8 +204,36 @@ def _check_approvals_and_docs(item: dict, item_dir: Path, config: dict) -> list[
     return problems
 
 
-def check_project(root: Path | str, branch: str | None = None) -> list[str]:
-    """Run rules 1-3. Returns problems as '<id>: <reason>' (main() prefixes 'FAIL ')."""
+DOCS_ONLY_PREFIX = "docs/work/"
+
+
+def only_work_docs(changed: list[str] | None) -> bool:
+    """True when a changed-files list is given and every path is under docs/work/ (empty = True)."""
+    if changed is None:
+        return False
+    return all(
+        p.strip().replace("\\", "/").removeprefix("./").startswith(DOCS_ONLY_PREFIX)
+        for p in changed
+    )
+
+
+def read_changed_files(path: Path | str | None) -> list[str] | None:
+    """Lines of a changed-files list, or None when no list was given or it cannot be read."""
+    if not path:
+        return None
+    try:
+        text = Path(path).read_text(encoding="utf-8-sig")
+    except OSError:
+        return None
+    return [ln for ln in text.splitlines() if ln.strip()]
+
+
+def check_project(
+    root: Path | str, branch: str | None = None, changed_files: list[str] | None = None
+) -> list[str]:
+    """Run rules 1-3. Returns problems as '<id>: <reason>' (main() prefixes 'FAIL ').
+
+    `changed_files` (the branch's diff) relaxes rule 3's status check for docs-only branches."""
     root = Path(root)
     problems: list[str] = []
     try:
@@ -240,7 +268,9 @@ def check_project(root: Path | str, branch: str | None = None) -> list[str]:
         item = items.get(bid)
         if item is None:
             problems.append(f"{bid}: branch '{branch}' has no valid work item in docs/work/")
-        elif STATUSES.index(item["status"]) < STATUSES.index("implementing"):
+        elif STATUSES.index(item["status"]) < STATUSES.index("implementing") and not only_work_docs(
+            changed_files
+        ):
             problems.append(
                 f"{bid}: branch '{branch}' carries code but status is {item['status']} "
                 "(must be implementing or later)"
@@ -275,14 +305,15 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--changed-files-from",
         metavar="FILE",
-        help="reserved for future use; accepted and ignored in V1",
+        help="file listing the branch's changed paths, one per line; a branch that only changes "
+        "docs/work/ may sit at any status",
     )
 
 
 def run(args: argparse.Namespace) -> int:
     root = Path(args.root)
     branch = args.branch if args.branch else current_branch(root)
-    problems = check_project(root, branch)
+    problems = check_project(root, branch, read_changed_files(args.changed_files_from))
     for p in problems:
         print(f"FAIL {p}")
     print("verify: OK" if not problems else f"verify: {len(problems)} problem(s)")

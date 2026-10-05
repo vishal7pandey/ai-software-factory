@@ -15,6 +15,11 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p.add_argument("--jira-key")
     p.add_argument("--autonomy", help="supervised | trusted (default: supervised)")
     p.add_argument("--dry-run", action="store_true", help="print the plan, write nothing")
+    p.add_argument(
+        "--no-check",
+        action="store_true",
+        help="do not run the generated CI's commands locally (default: run; never in --dry-run)",
+    )
     p.set_defaults(
         func=lambda a: installer.adopt(
             a.path,
@@ -23,6 +28,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
             jira_key=a.jira_key,
             autonomy=a.autonomy,
             dry_run=a.dry_run,
+            check=not a.no_check,
         )
     )
 
@@ -30,7 +36,18 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p.add_argument("path", nargs="?")
     p.add_argument("--force", action="store_true", help="overwrite locally modified managed files")
     p.add_argument("--dry-run", action="store_true", help="print the plan, write nothing")
-    p.set_defaults(func=lambda a: installer.sync(a.path, force=a.force, dry_run=a.dry_run))
+    p.add_argument(
+        "--check",
+        action="store_true",
+        help="write nothing; exit 1 if a managed file is missing or stale vs the factory source",
+    )
+    p.set_defaults(
+        func=lambda a: (
+            installer.sync_check(a.path)
+            if a.check
+            else installer.sync(a.path, force=a.force, dry_run=a.dry_run)
+        )
+    )
 
     p = subparsers.add_parser("new", help="create a project from a stack template and adopt it")
     p.add_argument("name")

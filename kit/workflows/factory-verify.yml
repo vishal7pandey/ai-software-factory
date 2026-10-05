@@ -17,6 +17,10 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install pyyaml
-      - run: python .factory/verify.py --branch "$HEAD_REF"
+      - run: |
+          git diff --name-only --no-renames "origin/$BASE_REF...HEAD" > "$RUNNER_TEMP/changed-files.txt"
+          python .factory/verify.py --branch "$HEAD_REF" --changed-files-from "$RUNNER_TEMP/changed-files.txt"
         env:
-          HEAD_REF: ${{ github.head_ref }}   # via env, not inline, to avoid script injection from branch names
+          # via env, not inline, to avoid script injection from branch names
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}

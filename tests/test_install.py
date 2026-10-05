@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from swfactory import common, installer
+from swfactory import adopt_inspect, common, installer
 from swfactory.commands import install as install_cmd
 from swfactory.common import FactoryError
 
@@ -117,7 +117,8 @@ def test_fresh_adopt_lays_down_kit(factory, proj, capsys):
     out = capsys.readouterr().out
     assert "CREATE" in out and "AGENTS.md" in out
     agents = (proj / "AGENTS.md").read_text(encoding="utf-8")
-    assert agents == "<!-- factory:begin -->\n## Factory\nUse the skills.\n<!-- factory:end -->\n"
+    block = "<!-- factory:begin -->\n## Factory\nUse the skills.\n<!-- factory:end -->\n"
+    assert agents == adopt_inspect.todo_section([]) + block  # no commands section: TODO above block
     assert (proj / "CLAUDE.md").read_text(encoding="utf-8") == "@AGENTS.md\n"
     assert (proj / ".github/workflows/ci.yml").read_text(encoding="utf-8") == "name: ci-python\n"
     assert (proj / ".factory/verify.py").is_file()
@@ -173,12 +174,13 @@ def test_existing_agents_md_gets_block_appended(factory, proj):
     _w(proj / "AGENTS.md", "# My project\n\nMy own rules.")
     run("adopt", str(proj))
     text = (proj / "AGENTS.md").read_text(encoding="utf-8")
-    assert text.startswith("# My project\n\nMy own rules.\n\n<!-- factory:begin -->\n")
+    assert text.startswith("# My project\n\nMy own rules.\n\n## Commands (TODO: confirm)\n")
+    assert "\n\n<!-- factory:begin -->\n" in text
     assert text.endswith("<!-- factory:end -->\n")
 
 
 def test_rerun_replaces_block_in_place(factory, proj):
-    _w(proj / "AGENTS.md", "top\n")
+    _w(proj / "AGENTS.md", "top\n## Commands\n")  # has a commands section: no TODO is added
     run("adopt", str(proj))
     agents = proj / "AGENTS.md"
     agents.write_text(
@@ -187,9 +189,8 @@ def test_rerun_replaces_block_in_place(factory, proj):
     _w(factory / "kit" / "AGENTS.block.md", "## Factory v2\n")
     assert run("sync", str(proj)) == 0
     text = agents.read_text(encoding="utf-8")
-    assert (
-        text == "top\n\n<!-- factory:begin -->\n## Factory v2\n<!-- factory:end -->\n\nuser tail\n"
-    )
+    block = "<!-- factory:begin -->\n## Factory v2\n<!-- factory:end -->\n"
+    assert text == "top\n## Commands\n\n" + block + "\nuser tail\n"
     assert text.count("factory:begin") == 1
 
 
@@ -213,7 +214,8 @@ def test_crlf_agents_md_stays_crlf(factory, proj):
     (proj / "AGENTS.md").write_bytes(b"# Mine\r\nline\r\n")
     run("adopt", str(proj))
     raw = (proj / "AGENTS.md").read_bytes()
-    assert raw.startswith(b"# Mine\r\nline\r\n\r\n<!-- factory:begin -->\r\n")
+    assert raw.startswith(b"# Mine\r\nline\r\n\r\n## Commands (TODO: confirm)\r\n")
+    assert b"\r\n\r\n<!-- factory:begin -->\r\n" in raw
     assert b"\n" not in raw.replace(b"\r\n", b"")
     assert run("adopt", str(proj)) == 0  # CRLF block is not seen as a user edit
 
@@ -412,6 +414,171 @@ def test_non_git_dir_warns_but_adopts(factory, tmp_path, capsys):
     assert "not a git repository" in capsys.readouterr().err
     assert (p / ".factory" / "factory.yaml").is_file()
     assert not (p / ".git").exists()
+
+
+# --- project-aware adoption (FACT-12) ------------------------------------------------------------
+
+CI_WITH_STEPS = """name: ci
+on:
+  push:
+    branches: [main]
+jobs:
+  test:
+    steps:
+      - run: uv sync --all-extras --all-groups
+      - run: uv run ruff check .
+      - run: uv run pytest -q
+"""
+
+
+class Recorder:
+    def __init__(self, fail=None):
+        self.fail, self.calls = fail or {}, []
+
+    def __call__(self, cmd, cwd):
+        self.calls.append(cmd)
+        return self.fail.get(cmd, (0, ""))
+
+
+def adopt_with(proj, runner=None, **kw) -> int:
+    return installer.adopt(str(proj), runner=runner, **kw)
+
+
+def test_adopt_prints_findings_before_and_report_after(factory, tmp_path, capsys):
+    _w(factory / "kit" / "ci" / "python.yml", CI_WITH_STEPS)
+    p = tmp_path / "legacy"
+    p.mkdir()
+    git_init(p)
+    subprocess.run(["git", "-C", str(p), "checkout", "-q", "-b", "master"], check=True)
+    _w(p / "pyproject.toml", '[project]\nname = "legacy"\n')
+    _w(p / ".github" / "workflows" / "build.yml", "name: b\non:\n  push:\n    branches: [main]\n")
+    rec = Recorder({"uv run ruff check .": (1, "84 errors")})
+    assert adopt_with(p, rec) == 0
+    out = capsys.readouterr().out
+    assert out.index("findings:") < out.index("CREATE")
+    assert "default branch: master" in out
+    assert (
+        ".github/workflows/build.yml: `push` runs only on main, but the default branch is master"
+        in out
+    )
+    assert out.index("CREATE") < out.index("result:")
+    assert "removed failing step `uv run ruff check .` (84 errors)" in out
+    assert (p / ".github/workflows/build.yml").read_text(encoding="utf-8").count("main") == 1
+    ci = (p / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "branches: [master]" in ci and "run: uv run ruff check ." not in ci
+    assert "run: uv run pytest -q" in ci
+
+    # no git repo: unknown branch, no crash, no trigger finding
+    q = tmp_path / "plain"
+    q.mkdir()
+    _w(q / "pyproject.toml", '[project]\nname = "plain"\n')
+    capsys.readouterr()
+    assert adopt_with(q, Recorder()) == 0
+    assert "default branch: unknown" in capsys.readouterr().out
+
+
+def test_adopt_inserts_todo_above_block_and_is_idempotent(factory, tmp_path, capsys):
+    p = tmp_path / "svc"
+    p.mkdir()
+    git_init(p)
+    _w(p / "pyproject.toml", '[project]\nname = "svc"\n')
+    _w(p / "Makefile", "test:\n\tpytest\nsecret-deploy:\n\tx\n")
+    _w(p / "package.json", '{"scripts": {"build": "tsc"}}')
+    _w(p / "AGENTS.md", "# Svc\n\nProse only.\n")
+    assert adopt_with(p, Recorder()) == 0
+    out = capsys.readouterr().out
+    assert "commands TODO section" in out and "2 detected command(s)" in out
+    text = (p / "AGENTS.md").read_text(encoding="utf-8")
+    todo = "## Commands (TODO: confirm)"
+    assert text.index(todo) < text.index("<!-- factory:begin -->")
+    assert "* `make test`" in text and "* `npm run build`" in text and "secret-deploy" not in text
+    before = snapshot(p)
+    assert adopt_with(p, Recorder()) == 0  # second adopt: the TODO counts as a commands section
+    assert "up to date" in capsys.readouterr().out
+    assert snapshot(p) == before
+
+
+def test_adopt_leaves_existing_commands_section_alone(factory, tmp_path):
+    p = tmp_path / "svc"
+    p.mkdir()
+    git_init(p)
+    _w(p / "pyproject.toml", '[project]\nname = "svc"\n')
+    mine = "# Svc\n\n## Build and test\n\nmake all\n"
+    _w(p / "AGENTS.md", mine)
+    adopt_with(p, Recorder())
+    text = (p / "AGENTS.md").read_text(encoding="utf-8")
+    assert text.startswith(mine + "\n<!-- factory:begin -->") and "TODO" not in text
+
+
+def test_adopt_check_flags(factory, tmp_path, proj, capsys):
+    _w(factory / "kit" / "ci" / "python.yml", CI_WITH_STEPS)
+    rec = Recorder()
+    assert adopt_with(proj, rec, dry_run=True) == 0  # dry-run: nothing runs, and says so
+    assert rec.calls == [] and "checks not run (--dry-run" in capsys.readouterr().out
+
+    assert adopt_with(proj, rec, check=False) == 0  # --no-check
+    assert rec.calls == []
+    ci = proj / ".github" / "workflows" / "ci.yml"
+    assert "run: uv run ruff check ." in ci.read_text(encoding="utf-8")
+
+    other = tmp_path / "other"
+    other.mkdir()
+    git_init(other)
+    _w(other / "pyproject.toml", '[project]\nname = "other"\n')
+    _w(other / ".github" / "workflows" / "ci.yml", "name: mine\n")
+    assert adopt_with(other, rec) == 0  # existing CI: not modified, nothing run
+    assert rec.calls == []
+    assert (other / ".github/workflows/ci.yml").read_text(encoding="utf-8") == "name: mine\n"
+
+    third = tmp_path / "third"
+    third.mkdir()
+    git_init(third)
+    _w(third / "pyproject.toml", '[project]\nname = "third"\n')
+    assert adopt_with(third, rec) == 0  # a real adopt runs the generated CI's commands
+    assert rec.calls == [
+        "uv sync --all-extras --all-groups",
+        "uv run ruff check .",
+        "uv run pytest -q",
+    ]
+
+
+def test_no_check_flag_reaches_adopt(factory, proj, monkeypatch):
+    seen = {}
+
+    def spy(path, **kw):
+        seen.update(kw)
+        return 0
+
+    monkeypatch.setattr(installer, "adopt", spy)
+    run("adopt", str(proj), "--no-check")
+    assert seen["check"] is False
+    run("adopt", str(proj))
+    assert seen["check"] is True
+
+
+def test_sync_check(factory, proj, capsys):
+    with pytest.raises(FactoryError, match="not adopted"):
+        run("sync", str(proj), "--check")
+    run("adopt", str(proj))
+    before = snapshot(proj)
+    capsys.readouterr()
+    assert run("sync", str(proj), "--check") == 0
+    assert "in sync" in capsys.readouterr().out
+
+    _w(factory / "src" / "swfactory" / "verify.py", "print('verify v2')\n")  # source changed
+    assert run("sync", str(proj), "--check") == 1
+    out = capsys.readouterr().out
+    assert "STALE" in out and ".factory/verify.py" in out and "factory sync" in out
+    assert snapshot(proj) == before  # --check writes nothing
+
+    run("sync", str(proj))
+    assert run("sync", str(proj), "--check") == 0
+    (proj / ".factory" / "policies" / "git.md").unlink()  # managed file deleted
+    assert run("sync", str(proj), "--check") == 1
+    assert "MISSING" in capsys.readouterr().out.splitlines()[-2]
+    run("sync", str(proj))
+    (proj / ".factory" / "policies" / "git.md").write_text("local edit\n", encoding="utf-8")
+    assert run("sync", str(proj), "--check") == 1  # local edit differs from the source
 
 
 # --- registry ----------------------------------------------------------------------------------
