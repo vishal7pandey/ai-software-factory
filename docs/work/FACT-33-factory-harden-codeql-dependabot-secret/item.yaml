@@ -1,0 +1,19 @@
+id: FACT-33
+type: feature
+title: 'factory harden: CodeQL, Dependabot, secret scanning'
+slug: factory-harden-codeql-dependabot-secret
+status: implementing
+risk: medium
+jira: FACT-33
+branch: feature/fact-33-factory-harden-codeql-dependabot-secret
+created: '2026-10-05'
+approvals:
+  spec:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-05'
+    delegated: true
+  plan:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-05'
+    delegated: true
+pr: null
