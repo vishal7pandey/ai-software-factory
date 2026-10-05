@@ -2,7 +2,7 @@ id: FACT-21
 type: feature
 title: Teach agents the file-editing hazards
 slug: teach-agents-the-file-editing-hazards
-status: implementing
+status: in-review
 risk: low
 jira: FACT-21
 branch: feature/fact-21-teach-agents-the-file-editing-hazards
