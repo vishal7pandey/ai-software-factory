@@ -2,7 +2,7 @@ id: FACT-33
 type: feature
 title: 'factory harden: CodeQL, Dependabot, secret scanning'
 slug: factory-harden-codeql-dependabot-secret
-status: in-review
+status: merged
 risk: medium
 jira: FACT-33
 branch: feature/fact-33-factory-harden-codeql-dependabot-secret
@@ -16,4 +16,4 @@ approvals:
     by: Vishal Pandey (delegated to agent)
     at: '2026-10-05'
     delegated: true
-pr: null
+pr: https://github.com/vishal7pandey/ai-software-factory/pull/12
