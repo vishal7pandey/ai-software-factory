@@ -163,6 +163,10 @@ pr: null                 # PR URL once opened
    diff) a branch whose changed files are all under `docs/work/` is also exempt from the status check
    (the item must still exist); an unreadable list is ignored, so the strict rule applies.
 4. Prints one line per violation: `FAIL <id>: <reason>`; final line `verify: OK` or `verify: N problem(s)`.
+5. (FACT-5, warning only — never changes the exit code) status ≥ `in-review` and `test-plan.md`'s
+   `## Audit` section still holds only the template placeholder ⇒ `WARN <id>: <reason>` printed before
+   the FAIL lines; the final line becomes `verify: OK (N warning(s))` when there are no problems, so an
+   empty audit does not pass silently even though it does not block the merge.
 
 ### 3.4 Skill format
 
