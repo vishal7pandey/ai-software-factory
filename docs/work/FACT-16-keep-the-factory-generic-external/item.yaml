@@ -1,0 +1,17 @@
+id: FACT-16
+type: feature
+title: 'Keep the factory generic: external project registry'
+slug: keep-the-factory-generic-external
+status: in-review
+risk: low
+jira: FACT-16
+branch: feature/fact-16-keep-the-factory-generic-external
+created: '2026-10-04'
+approvals:
+  spec:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-05'
+  plan:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-05'
+pr: https://github.com/vishal7pandey/ai-software-factory/pull/4

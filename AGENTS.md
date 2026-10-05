@@ -23,7 +23,8 @@ On this Windows machine Application Control blocks `pytest.exe`; use `uv run pyt
 * Write files with `\n` newlines; tests must pass on Windows and Linux.
 * Scope check before adding anything: "has a real project needed this yet?" If not, put it in
   `docs/ROADMAP.md` instead.
-* Never commit machine paths (`registry/local.yaml` is gitignored) or secrets.
+* Never commit machine paths, project registries or secrets. The registry is external
+  (`FACTORY_REGISTRY` or `~/.factory/registry.yaml`); `factory lint` fails on a `registry/` dir.
 
 <!-- factory:begin -->
 ## Engineering method (AI Software Factory)

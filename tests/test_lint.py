@@ -276,3 +276,57 @@ def test_command_exit_codes_and_output(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "FAIL skills/demo/SKILL.md:" in out
     assert "lint: 1 problem(s)" in out
+
+
+# --- generic factory (no instance data) ----------------------------------------------------------
+
+
+def test_instance_data_rules(tmp_path):
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "ok.md").write_text("see https://example.com/wiki\n", encoding="utf-8")
+    assert checks.lint_generic(tmp_path) == []
+
+    (tmp_path / "docs" / "bad.md").write_text("https://x.atlassian.net/wiki\n", encoding="utf-8")
+    found = checks.lint_generic(tmp_path)
+    assert [f.name for f in found] == ["docs/bad.md"] and found[0].level == checks.FAIL
+
+    # the same hostname in a skill, kit or tests dir: skills/kit fail, tests are not scanned
+    put_skill(tmp_path)
+    (tmp_path / "skills" / "factory-demo" / "ref.md").write_text(
+        "a.atlassian.net\n", encoding="utf-8"
+    )
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "t.py").write_text("x = 'a.atlassian.net'\n", encoding="utf-8")
+    names = {f.name for f in checks.lint_generic(tmp_path)}
+    assert names == {"docs/bad.md", "skills/factory-demo/ref.md"}
+
+    # the factory's own evidence trail is not scanned
+    (tmp_path / "docs" / "bad.md").unlink()
+    (tmp_path / "skills" / "factory-demo" / "ref.md").unlink()
+    (tmp_path / "docs" / "work").mkdir()
+    (tmp_path / "docs" / "work" / "n.md").write_text("a.atlassian.net\n", encoding="utf-8")
+    assert checks.lint_generic(tmp_path) == []
+
+
+def test_registry_directory_fails_lint(tmp_path, monkeypatch, capsys):
+    (tmp_path / "registry").mkdir()
+    (tmp_path / "registry" / "projects.yaml").write_text("projects: []\n", encoding="utf-8")
+    found = checks.lint_generic(tmp_path)
+    assert [(f.level, f.name) for f in found] == [(checks.FAIL, "registry/")]
+
+    # wired into `factory lint`: a valid kit and skill alone pass, the registry dir makes it fail
+    monkeypatch.setattr(common, "FACTORY_ROOT", tmp_path)
+    lint_manifest(tmp_path, make_kit(tmp_path))
+    put_skill(tmp_path)
+    assert main(["lint"]) == 1
+    assert "FAIL registry/:" in capsys.readouterr().out
+    (tmp_path / "registry" / "projects.yaml").unlink()
+    (tmp_path / "registry").rmdir()
+    assert main(["lint"]) == 0
+
+
+def test_repo_has_no_registry_dir():
+    root = common.FACTORY_ROOT
+    assert not (root / "registry").exists()
+    gi = (root / ".gitignore").read_text(encoding="utf-8")
+    assert "registry" not in gi

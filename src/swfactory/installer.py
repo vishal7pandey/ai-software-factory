@@ -12,6 +12,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
+
 from swfactory import __version__, common
 from swfactory.common import FactoryError
 
@@ -326,31 +328,32 @@ def sync(path: str | Path | None = None, *, force: bool = False, dry_run: bool =
 
 def _load_registry() -> dict:
     p = common.registry_path()
-    data = common.load_yaml(p) if p.is_file() else {}
+    try:
+        data = common.load_yaml(p) if p.is_file() else {}
+    except (OSError, yaml.YAMLError) as e:
+        raise FactoryError(f"cannot read the registry {p}: {e}") from e
+    if not isinstance(data, dict):
+        raise FactoryError(f"the registry {p} must be a mapping with `projects` and `paths`")
     data["projects"] = data.get("projects") or []
+    data["paths"] = data.get("paths") or {}
     return data
 
 
 def _save_registry(data: dict) -> None:
     p = common.registry_path()
     header: list[str] = []
-    if p.is_file():
-        for line in p.read_text(encoding="utf-8").splitlines():
-            if not line.startswith("#"):
-                break
-            header.append(line)
-    common.dump_yaml(data, p)
-    if header:  # keep the file's leading comment; PyYAML would drop it
-        p.write_text(
-            "\n".join(header) + "\n" + p.read_text(encoding="utf-8"), encoding="utf-8", newline="\n"
-        )
-
-
-def _load_local() -> dict:
-    p = common.local_registry_path()
-    data = common.load_yaml(p) if p.is_file() else {}
-    data["paths"] = data.get("paths") or {}
-    return data
+    try:
+        if p.is_file():
+            for line in p.read_text(encoding="utf-8").splitlines():
+                if not line.startswith("#"):
+                    break
+                header.append(line)
+        common.dump_yaml(data, p)
+        if header:  # keep the file's leading comment; PyYAML would drop it
+            body = p.read_text(encoding="utf-8")
+            p.write_text("\n".join(header) + "\n" + body, encoding="utf-8", newline="\n")
+    except OSError as e:
+        raise FactoryError(f"cannot write the registry {p}: {e}") from e
 
 
 def normalise_repo_url(url: str) -> str:
@@ -388,24 +391,30 @@ def _register_adopted(root: Path, config: dict) -> None:
         "adopted": True,
     }
     merged = {**old, **fresh}
+    changed = False
     if index is None:
         projects.append(merged)
-        _save_registry(reg)
+        changed = True
     elif merged != old:
         projects[index] = merged
+        changed = True
+    if reg["paths"].get(name) != str(root):
+        reg["paths"][name] = str(root)
+        changed = True
+    if changed:
         _save_registry(reg)
-    local = _load_local()
-    if local["paths"].get(name) != str(root):
-        local["paths"][name] = str(root)
-        common.dump_yaml(local, common.local_registry_path())
 
 
 def project_list() -> int:
-    projects = _load_registry()["projects"]
+    if not common.registry_path().is_file():
+        where = common.registry_path()
+        print(f"no registry yet (`factory adopt` creates it; location: {where})")
+        return 0
+    reg = _load_registry()
+    projects, paths = reg["projects"], reg["paths"]
     if not projects:
         print("no projects registered")
         return 0
-    paths = _load_local()["paths"]
     rows = [("name", "stack", "tracker", "adopted", "path")]
     for p in projects:
         t = p.get("tracker") or {}
@@ -450,11 +459,9 @@ def project_add(
             "adopted": False,
         }
     )
-    _save_registry(reg)
     if abs_path:
-        local = _load_local()
-        local["paths"][name] = str(abs_path)
-        common.dump_yaml(local, common.local_registry_path())
+        reg["paths"][name] = str(abs_path)
+    _save_registry(reg)
     print(f"registered {name}")
     return 0
 
@@ -465,10 +472,8 @@ def project_remove(name: str) -> int:
     if len(kept) == len(reg["projects"]):
         raise FactoryError(f"project '{name}' is not registered")
     reg["projects"] = kept
+    reg["paths"].pop(name, None)
     _save_registry(reg)
-    local = _load_local()
-    if local["paths"].pop(name, None) is not None:
-        common.dump_yaml(local, common.local_registry_path())
     print(f"removed {name} from the registry (project files untouched)")
     return 0
 

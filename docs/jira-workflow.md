@@ -8,8 +8,9 @@ in `jira:` and the item id is the key (`PF-12`). Statuses are defined in
 
 Every project is fully separate: its **own Jira project, its own Confluence space, its own GitHub
 repo**, all sharing one short key. Nothing is shared between projects, so a project can be archived
-or deleted without touching the others. Record the key in `registry/projects.yaml`
-(`tracker.key`, `confluence.space`) and in the project's `.factory/factory.yaml`.
+or deleted without touching the others. Record the key in your project registry
+(`tracker.key`; the file is outside this repo, see [ARCHITECTURE.md §3.6](ARCHITECTURE.md) and
+`registry.example.yaml`) and in the project's `.factory/factory.yaml`.
 
 Create-by-hand checklist for a new project (the factory CLI and agent tools cannot create Jira
 projects or Confluence spaces):

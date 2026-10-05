@@ -5,6 +5,5 @@ __pycache__/
 .ruff_cache/
 *.egg-info/
 dist/
-registry/local.yaml
 .env
 .scratch/

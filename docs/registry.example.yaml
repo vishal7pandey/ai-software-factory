@@ -1,0 +1,21 @@
+# Example project registry. Copy to ~/.factory/registry.yaml (or point FACTORY_REGISTRY at your own
+# file); `factory adopt` creates and updates it. It lives outside the factory repo on purpose:
+# the factory is generic, the registry is yours. Names, keys and paths below are placeholders.
+projects:
+- name: sample-app
+  repo: github.com/example-org/sample-app
+  stack: python
+  tracker:
+    kind: jira
+    key: PROJ
+  autonomy: supervised
+  adopted: true
+- name: sample-docs
+  repo: github.com/example-org/sample-docs
+  stack: docs
+  tracker:
+    kind: none
+  autonomy: supervised
+  adopted: false
+paths:                       # project name -> absolute path of the local checkout
+  sample-app: /home/jane/work/sample-app

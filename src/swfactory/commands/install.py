@@ -38,7 +38,9 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p.add_argument("--dir", help="parent directory (default: current directory)")
     p.set_defaults(func=lambda a: installer.new_project(a.name, stack=a.stack, parent=a.dir))
 
-    project = subparsers.add_parser("project", help="manage the project registry")
+    project = subparsers.add_parser(
+        "project", help="manage the project registry (FACTORY_REGISTRY or ~/.factory/registry.yaml)"
+    )
     psub = project.add_subparsers(dest="project_command", required=True, metavar="<action>")
 
     p = psub.add_parser("list", help="list registered projects")
@@ -50,7 +52,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p.add_argument("--stack", default="other", help="python | node | docs | other")
     p.add_argument("--tracker", help="jira | github | none (default: none)")
     p.add_argument("--jira-key")
-    p.add_argument("--path", help="local checkout (stored in registry/local.yaml)")
+    p.add_argument("--path", help="local checkout (stored in the user-level registry file)")
     p.set_defaults(
         func=lambda a: installer.project_add(
             a.name,
