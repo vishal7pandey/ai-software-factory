@@ -2,9 +2,44 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
-from swfactory import adopt_inspect
+from swfactory import adopt_inspect, common
+
+# The developer's real home, captured at import time, before any test can redirect it. The registry
+# is user-level data outside the repo (Treaty 3.6): no test may read or write it (FACT-18).
+REAL_HOME = Path.home().resolve()
+REAL_FACTORY_DIR = REAL_HOME / ".factory"
+
+
+def under_real_factory_dir(path: Path) -> bool:
+    return Path(path).resolve().is_relative_to(REAL_FACTORY_DIR)
+
+
+@pytest.fixture(autouse=True)
+def isolated_home(tmp_path_factory, monkeypatch):
+    """Every test runs with HOME, USERPROFILE and FACTORY_REGISTRY inside a temp directory, so a
+    test that forgets its own redirect cannot touch `~/.factory/registry.yaml`. As a second line,
+    the registry path resolver fails loudly if it ever returns a path under the real `~/.factory`.
+    A test that wants a specific registry or home sets it itself, after this fixture."""
+    home = tmp_path_factory.mktemp("home")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setenv("FACTORY_REGISTRY", str(home / ".factory" / "registry.yaml"))
+
+    real_registry_path = common.registry_path
+
+    def guarded_registry_path() -> Path:
+        path = real_registry_path()
+        assert not under_real_factory_dir(path), (
+            f"test isolation breach: registry_path() resolved to {path}, inside the real "
+            f"{REAL_FACTORY_DIR}. Tests must redirect FACTORY_REGISTRY/HOME into tmp_path."
+        )
+        return path
+
+    monkeypatch.setattr(common, "registry_path", guarded_registry_path)
 
 
 @pytest.fixture(autouse=True)

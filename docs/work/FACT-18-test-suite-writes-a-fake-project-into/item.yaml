@@ -1,0 +1,17 @@
+id: FACT-18
+type: bug
+title: Test suite writes a fake project into the real registry
+slug: test-suite-writes-a-fake-project-into
+status: in-review
+risk: low
+jira: FACT-18
+branch: fix/fact-18-test-suite-writes-a-fake-project-into
+created: '2026-10-05'
+approvals:
+  spec:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-05'
+  plan:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-05'
+pr: https://github.com/vishal7pandey/ai-software-factory/pull/6
