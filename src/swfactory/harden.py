@@ -263,9 +263,12 @@ def summary(outcomes: list[Outcome], *, dry_run: bool) -> str:
     return f"harden: {n[ENABLED]} enabled, {tail}"
 
 
-def run(root: Path | str, *, dry_run: bool = False, gh: Gh | None = None) -> tuple[list[str], int]:
-    """Lines to print and the exit code (1 when a protection failed). Raises FactoryError when the
-    project has no GitHub remote or, when applying, the repository settings cannot be read."""
+def evaluate(
+    root: Path | str, *, dry_run: bool, gh: Gh | None = None
+) -> tuple[RepoState, list[Outcome]]:
+    """Read the repository named by the project's origin remote, then harden it (or, with
+    `dry_run`, only plan). Raises FactoryError when the project has no GitHub remote or, when
+    applying, the repository settings cannot be read."""
     gh = gh or gh_api
     owner, repo = repo_slug(root)
     state = read_state(owner, repo, gh)
@@ -274,11 +277,42 @@ def run(root: Path | str, *, dry_run: bool = False, gh: Gh | None = None) -> tup
             f"cannot read the settings of {owner}/{repo} ({state.protections[0].detail}); "
             "is `gh` installed and logged in with repo access (`gh auth status`)?"
         )
+    return state, harden_repo(state, gh, dry_run=dry_run)
+
+
+def report(state: RepoState, outcomes: list[Outcome], *, dry_run: bool) -> list[str]:
     visibility = {None: "visibility unknown", True: "private", False: "public"}[state.private]
-    outcomes = harden_repo(state, gh, dry_run=dry_run)
-    lines = [f"{owner}/{repo} ({visibility})", *(o.line() for o in outcomes)]
-    lines.append(summary(outcomes, dry_run=dry_run))
-    return lines, 1 if any(o.result == FAILED for o in outcomes) else 0
+    return [
+        f"{state.owner}/{state.repo} ({visibility})",
+        *(o.line() for o in outcomes),
+        summary(outcomes, dry_run=dry_run),
+    ]
+
+
+def run(root: Path | str, *, dry_run: bool = False, gh: Gh | None = None) -> tuple[list[str], int]:
+    """Lines to print and the exit code (1 when a protection failed)."""
+    state, outcomes = evaluate(root, dry_run=dry_run, gh=gh)
+    return report(state, outcomes, dry_run=dry_run), int(any(o.result == FAILED for o in outcomes))
+
+
+def adopt_note(root: Path | str, shown_path: str, gh: Gh | None = None) -> list[str]:
+    """What `factory adopt` prints last: the harden plan in dry-run form and the one command that
+    applies it. Read-only and never raises: adopt must not change repo settings or fail on this."""
+    apply = (
+        f'factory harden "{shown_path}"' if " " in shown_path else f"factory harden {shown_path}"
+    )
+    try:
+        state, outcomes = evaluate(root, dry_run=True, gh=gh)
+    except FactoryError as e:
+        return [f"repo protections: not checked ({e}); then run `{apply}`"]
+    if all(o.result in (ON, NA) for o in outcomes):
+        return ["repo protections: nothing to enable (see `factory doctor`)"]
+    lines = report(state, outcomes, dry_run=True)
+    return [
+        "repo protections (dry-run; adopt changes no repository setting):",
+        *(f"  {ln}" for ln in lines),
+        f"apply with: {apply}",
+    ]
 
 
 def repo_slug(root: Path | str) -> tuple[str, str]:

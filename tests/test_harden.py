@@ -369,6 +369,58 @@ def test_command_when_gh_is_unusable_is_a_user_error_and_dry_run_is_not(proj, ca
     assert main(["harden", str(proj), "--dry-run"]) == 0
 
 
+# --- adopt ----------------------------------------------------------------------------------------
+
+
+def adoptable(tmp_path, remote="https://github.com/me/proj.git"):
+    p = git_repo(tmp_path / "newproj", remote)
+    (p / "pyproject.toml").write_text('[project]\nname = "newproj"\n', encoding="utf-8")
+    return p
+
+
+@pytest.mark.parametrize("flags", [[], ["--dry-run"]])
+def test_adopt_prints_the_plan_and_the_apply_command_and_writes_nothing(
+    tmp_path, monkeypatch, capsys, flags
+):
+    gh = FakeGh(secret=False, alerts=False, updates=False, codeql=False)
+    monkeypatch.setattr(harden, "gh_api", gh)
+    p = adoptable(tmp_path)
+    assert main(["adopt", str(p), "--no-check", *flags]) == 0
+    out = capsys.readouterr().out
+    assert gh.writes == [] and gh.calls  # it did read the state
+    assert "repo protections (dry-run; adopt changes no repository setting):" in out
+    assert out.count("would") >= 4 and f"PUT {BASE}/vulnerability-alerts" in out
+    assert out.rstrip().splitlines()[-1] == f"apply with: factory harden {p}"
+
+
+def test_adopt_with_everything_on_says_there_is_nothing_to_enable(tmp_path, monkeypatch, capsys):
+    gh = FakeGh()
+    monkeypatch.setattr(harden, "gh_api", gh)
+    assert main(["adopt", str(adoptable(tmp_path)), "--no-check"]) == 0
+    out = capsys.readouterr().out
+    assert "nothing to enable" in out and "apply with" not in out and gh.writes == []
+
+
+def test_adopt_without_a_github_remote_prints_one_line_and_succeeds(tmp_path, capsys):
+    assert main(["adopt", str(adoptable(tmp_path, remote=None)), "--no-check"]) == 0
+    out = capsys.readouterr().out
+    (line,) = [ln for ln in out.splitlines() if ln.startswith("repo protections")]
+    assert "not checked" in line and "factory harden" in line
+
+
+def test_adopt_with_gh_unusable_still_succeeds_and_names_the_command(tmp_path, capsys):
+    p = adoptable(tmp_path)
+    assert main(["adopt", str(p), "--no-check"]) == 0  # the conftest guard makes gh unusable
+    out = capsys.readouterr().out
+    assert "state unknown" in out and f"apply with: factory harden {p}" in out
+
+
+def test_adopt_note_quotes_a_path_with_spaces(tmp_path):
+    p = git_repo(tmp_path / "my proj", "https://github.com/me/proj.git")
+    note = harden.adopt_note(p, str(p), gh=FakeGh(codeql=False))
+    assert note[-1] == f'apply with: factory harden "{p}"'
+
+
 # --- doctor ---------------------------------------------------------------------------------------
 
 

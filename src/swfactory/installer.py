@@ -378,6 +378,10 @@ def adopt(
     )
     if not dry_run:
         _register_adopted(root, config)
+    from swfactory import harden  # imported here: harden imports this module for the git remote
+
+    for line in harden.adopt_note(root, str(path)):
+        print(line)
     return code
 
 
