@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -12,7 +13,14 @@ import pytest
 import yaml
 
 from swfactory import verify
-from swfactory.verify import STATUSES, check_project, required_approvals, validate_item
+from swfactory.verify import (
+    STATUSES,
+    audit_is_placeholder,
+    check_project,
+    required_approvals,
+    validate_item,
+    warn_project,
+)
 
 VERIFY_SRC = Path(verify.__file__)
 APPROVAL = {"by": "Someone", "at": "2026-10-04"}
@@ -282,6 +290,84 @@ def test_branch_id_is_not_a_prefix_match(tmp_path):
 def test_exempt_branches(tmp_path, branch):
     write_item(tmp_path, make_item(status="draft"))
     assert check_project(tmp_path, branch) == []
+
+
+# --- warnings: empty test-plan Audit (FACT-5) ---------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (
+            "# Test plan\n\n## Audit (after implementation)\n\n<!-- Filled after. -->\n",
+            True,
+        ),
+        ("# Test plan\n\n## Audit (after implementation)\n\n   \n\n", True),
+        ("# Test plan\n\n## Audit (after implementation)\nRed first, 3 mutations caught.\n", False),
+        ("# Test plan\n\nNo Audit heading here.\n", False),
+        ("# Test plan\n\n## Audit (after implementation)\n<!-- old --> still has text\n", False),
+    ],
+)
+def test_audit_is_placeholder(text, expected):
+    assert audit_is_placeholder(text) is expected
+
+
+def test_warn_project_only_for_in_review_or_later_with_a_placeholder_audit(tmp_path):
+    placeholder = "## Audit (after implementation)\n\n<!-- Filled after implementation. -->\n"
+    filled = "## Audit (after implementation)\nRed first; 2 mutations caught.\n"
+
+    d = write_item(tmp_path, make_item("F-001", status="implementing", approvals=full_approvals()))
+    (d / "test-plan.md").write_text(placeholder, encoding="utf-8")
+    assert warn_project(tmp_path) == []  # implementing: too early to warn
+
+    d = write_item(
+        tmp_path,
+        make_item("F-002", slug="b", status="in-review", approvals=full_approvals(), pr="x"),
+    )
+    (d / "test-plan.md").write_text(placeholder, encoding="utf-8")
+    warnings = warn_project(tmp_path)
+    assert len(warnings) == 1
+    assert warnings[0].startswith("F-002:") and "Audit" in warnings[0]
+
+    d = write_item(
+        tmp_path, make_item("F-003", slug="c", status="merged", approvals=full_approvals(), pr="x")
+    )
+    (d / "test-plan.md").write_text(filled, encoding="utf-8")
+    assert warn_project(tmp_path) == [
+        "F-002: status is in-review but the Audit section of "
+        "test-plan.md is still the template placeholder"
+    ]  # F-003 has a real audit: no new warning
+
+    write_item(tmp_path, make_item("F-004", slug="d", status="draft"), docs=False)
+    # no test-plan.md at all, and too early anyway: must not raise, must not warn
+    assert "F-004" not in "\n".join(warn_project(tmp_path))
+
+
+def test_run_with_only_a_warning_does_not_fail(tmp_path, capsys):
+    d = write_item(
+        tmp_path, make_item(status="in-review", approvals=full_approvals(), pr="https://example/1")
+    )
+    (d / "test-plan.md").write_text(
+        "## Audit (after implementation)\n\n<!-- Filled after implementation. -->\n",
+        encoding="utf-8",
+    )
+    assert verify.main(["--root", str(tmp_path), "--branch", "main"]) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert out[0].startswith("WARN F-001:") and "Audit" in out[0]
+    assert out[-1] == "verify: OK (1 warning(s))"
+
+
+def test_run_with_a_problem_and_a_warning_shows_both_and_still_fails(tmp_path, capsys):
+    d = write_item(tmp_path, make_item(status="in-review"))  # missing approvals -> a real problem
+    (d / "test-plan.md").write_text(
+        "## Audit (after implementation)\n\n<!-- Filled after implementation. -->\n",
+        encoding="utf-8",
+    )
+    assert verify.main(["--root", str(tmp_path), "--branch", "main"]) == 1
+    out = capsys.readouterr().out.splitlines()
+    assert any(line.startswith("WARN F-001:") for line in out)
+    assert any(line.startswith("FAIL F-001:") for line in out)
+    assert re.fullmatch(r"verify: \d+ problem\(s\)", out[-1])  # never the warning-count form
 
 
 # --- rule 4 / CLI output -----------------------------------------------------------------------
