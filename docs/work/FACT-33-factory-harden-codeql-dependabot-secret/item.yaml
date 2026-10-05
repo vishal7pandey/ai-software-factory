@@ -2,7 +2,7 @@ id: FACT-33
 type: feature
 title: 'factory harden: CodeQL, Dependabot, secret scanning'
 slug: factory-harden-codeql-dependabot-secret
-status: implementing
+status: in-review
 risk: medium
 jira: FACT-33
 branch: feature/fact-33-factory-harden-codeql-dependabot-secret

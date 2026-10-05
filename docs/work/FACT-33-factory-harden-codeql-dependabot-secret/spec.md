@@ -1,6 +1,6 @@
 # FACT-33 — factory harden: CodeQL, Dependabot, secret scanning
 
-Status: draft · Risk: medium · Jira: FACT-33
+Status: spec-approved · Risk: medium · Jira: FACT-33
 Created: 2026-10-05 · Slug: factory-harden-codeql-dependabot-secret
 
 ## Problem
