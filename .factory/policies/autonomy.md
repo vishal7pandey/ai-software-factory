@@ -25,13 +25,27 @@ Mode is set in `.factory/factory.yaml › autonomy`.
 
 ## NEVER
 
-* Run `factory approve`, or write `approvals:` entries in `item.yaml`. Humans approve.
+* Run `factory approve`, or write `approvals:` entries in `item.yaml`, unless the owner has delegated that gate to you (see Delegated approval). Never record an approval under a human's own name.
 * Merge your own PR.
 * Push to `main`; force-push a shared branch.
 * Deploy to production without a fresh, explicit human go-ahead in the current conversation.
 * Disable, skip or delete tests or checks to make something pass.
 * Exfiltrate secrets or code; commit secrets.
 * Run destructive commands against production data.
+
+## Delegated approval
+
+The owner may delegate the spec or plan approval to an agent. It is valid only when:
+
+* the owner gave an explicit instruction that names the gate(s) and the scope (a work item, a ticket, a run),
+  and it is recorded where others can read it (the tracker ticket, the run brief, the conversation). An agent never infers it;
+* the agent records it as `factory approve <id> spec|plan --delegated "<owner name>"`, which writes
+  `by: "<owner name> (delegated to agent)"` and `delegated: true`. Never under the owner's own name;
+* it is never used for a production go-ahead, which needs a fresh explicit human instruction every time. A delegation to merge,
+  if given, must be as explicit and recorded as an approval delegation.
+
+`factory status` marks items with a delegated approval, and `verify` accepts the form. Delegation does not replace review:
+the PR and its checks still stand.
 
 ## Supervised vs trusted
 

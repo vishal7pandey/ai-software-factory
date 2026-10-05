@@ -34,6 +34,20 @@ _DIR_ID_RE = re.compile(r"^((?:[FB]|[A-Z][A-Z0-9]+)-\d+)-")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _BRANCH_RE = re.compile(r"^(?:feature|fix)/((?:[fb]|[a-z][a-z0-9]+)-\d+)-", re.IGNORECASE)
 
+# A delegated approval (FACT-19): `by: "<who> (delegated to agent)"`, plus `delegated: true`.
+DELEGATED_SUFFIX = " (delegated to agent)"
+
+
+def is_delegated(record: object) -> bool:
+    """True for an approval record written with `--delegated` or by hand in the same wording."""
+    if not isinstance(record, dict):
+        return False
+    by = record.get("by")
+    return record.get("delegated") is True or (
+        isinstance(by, str) and by.endswith(DELEGATED_SUFFIX)
+    )
+
+
 # Order in which item.yaml keys are written (docs/ARCHITECTURE.md section 3.2).
 ITEM_KEYS = [
     "id",
@@ -182,6 +196,12 @@ def validate_item(item: dict, dirname: str) -> list[str]:
                 and _DATE_RE.match(rec["at"])
             ):
                 problems.append(f"approvals.{kind} must be {{by: <name>, at: YYYY-MM-DD}}")
+            elif "delegated" in rec and not isinstance(rec["delegated"], bool):
+                problems.append(f"approvals.{kind}.delegated must be true or false")
+            elif rec.get("delegated") is True and not rec["by"].endswith(DELEGATED_SUFFIX):
+                problems.append(
+                    f"approvals.{kind} is delegated but 'by' does not end with '{DELEGATED_SUFFIX}'"
+                )
     return problems
 
 

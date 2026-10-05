@@ -11,6 +11,7 @@ from pathlib import Path
 from swfactory import common
 from swfactory.common import FactoryError
 from swfactory.verify import (
+    DELEGATED_SUFFIX,
     ITEM_KEYS,
     JIRA_RE,
     RISKS,
@@ -18,6 +19,7 @@ from swfactory.verify import (
     UNFILLED,
     check_project,
     dir_id,
+    is_delegated,
     load_item,
     open_marker,
     required_approvals,
@@ -298,7 +300,10 @@ def collect_status(root: Path, show_all: bool) -> list[tuple[str, str, str, str,
         nxt = " + ".join(skills) or "-"
         if human:
             nxt += f" | human: {human}"
-        rows.append((item["id"], item["type"], item["status"], item.get("branch") or "-", nxt))
+        status = item["status"]
+        if any(is_delegated(r) for r in (item.get("approvals") or {}).values()):
+            status += " (delegated)"
+        rows.append((item["id"], item["type"], status, item.get("branch") or "-", nxt))
     return rows
 
 
@@ -331,7 +336,16 @@ def _doc_ok(path: Path, label: str) -> None:
         raise FactoryError(f"{label} still contains '{marker}'; resolve open questions first")
 
 
-def cmd_approve(ident: str, kind: str, yes: bool, start: Path | str = ".") -> int:
+def cmd_approve(
+    ident: str,
+    kind: str,
+    yes: bool,
+    start: Path | str = ".",
+    delegated: str | None = None,
+) -> int:
+    """`delegated` is the name of whoever delegated the approval to an agent (FACT-19)."""
+    if delegated is not None and not delegated.strip():
+        raise FactoryError("--delegated needs the name of whoever delegated this approval")
     root = project_root(start)
     item_dir = find_item_dir(root, ident)
     item = load_valid_item(item_dir)
@@ -348,7 +362,11 @@ def cmd_approve(ident: str, kind: str, yes: bool, start: Path | str = ".") -> in
         )
     doc = f"{kind}.md"
     _doc_ok(item_dir / doc, f"{item_dir.name}/{doc}")
-    who = common.git_user_name(root)
+    who = (
+        f"{delegated.strip()}{DELEGATED_SUFFIX}"
+        if delegated is not None
+        else common.git_user_name(root)
+    )
     if not yes:
         if not sys.stdin.isatty():
             raise FactoryError("not a terminal: re-run with --yes to approve non-interactively")
@@ -362,7 +380,10 @@ def cmd_approve(ident: str, kind: str, yes: bool, start: Path | str = ".") -> in
         if sys.stdin.readline().strip().lower() != "y":
             print("Not approved.")
             return 1
-    item["approvals"] = {**(item.get("approvals") or {}), kind: {"by": who, "at": common.today()}}
+    record = {"by": who, "at": common.today()}
+    if delegated is not None:
+        record["delegated"] = True
+    item["approvals"] = {**(item.get("approvals") or {}), kind: record}
     if advancing:
         item["status"] = target
     write_item(item_dir, item)

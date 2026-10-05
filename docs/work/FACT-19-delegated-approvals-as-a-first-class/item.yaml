@@ -1,0 +1,17 @@
+id: FACT-19
+type: feature
+title: Delegated approvals as a first-class form
+slug: delegated-approvals-as-a-first-class
+status: in-review
+risk: medium
+jira: FACT-19
+branch: feature/fact-19-delegated-approvals-as-a-first-class
+created: '2026-10-05'
+approvals:
+  spec:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-05'
+  plan:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-05'
+pr: https://github.com/vishal7pandey/ai-software-factory/pull/8
