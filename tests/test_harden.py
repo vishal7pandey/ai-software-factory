@@ -11,6 +11,7 @@ import subprocess
 import pytest
 
 from swfactory import common, harden
+from swfactory.cli import main
 from swfactory.common import FactoryError
 
 # --- the runner ---------------------------------------------------------------------------------
@@ -318,6 +319,54 @@ def test_dry_run_with_gh_unusable_prints_the_plan_with_unknown_states(proj):
     assert code == 0
     assert lines[0] == "me/proj (visibility unknown)"
     assert sum("state unknown" in ln for ln in lines) == 4
+
+
+# --- the command ----------------------------------------------------------------------------------
+
+
+def test_command_applies_and_prints(proj, monkeypatch, capsys):
+    gh = FakeGh(codeql=False)
+    monkeypatch.setattr(harden, "gh_api", gh)
+    assert main(["harden", str(proj)]) == 0
+    out = capsys.readouterr().out
+    assert gh.writes == [CODEQL_WRITE]
+    assert "me/proj (public)" in out and "enabled" in out
+    assert out.splitlines()[-1].startswith("harden: 1 enabled, 3 already on")
+
+
+def test_command_dry_run_flag(proj, monkeypatch, capsys):
+    gh = FakeGh(codeql=False)
+    monkeypatch.setattr(harden, "gh_api", gh)
+    assert main(["harden", str(proj), "--dry-run"]) == 0
+    assert gh.writes == []
+    assert "harden (dry-run): 1 would be enabled" in capsys.readouterr().out
+
+
+def test_command_defaults_to_the_current_directory(proj, monkeypatch, capsys):
+    gh = FakeGh()
+    monkeypatch.setattr(harden, "gh_api", gh)
+    monkeypatch.chdir(proj)
+    assert main(["harden"]) == 0
+    assert "me/proj" in capsys.readouterr().out
+
+
+def test_command_exit_code_is_one_when_a_protection_failed(proj, monkeypatch, capsys):
+    gh = FakeGh(codeql=False, fail={("PATCH", "/code-scanning/default-setup"): 403})
+    monkeypatch.setattr(harden, "gh_api", gh)
+    assert main(["harden", str(proj)]) == 1
+    captured = capsys.readouterr()
+    assert "HTTP 403" in captured.out and MARKER not in captured.out + captured.err
+
+
+def test_command_without_a_github_remote_is_a_user_error(tmp_path, capsys):
+    assert main(["harden", str(git_repo(tmp_path / "bare"))]) == 1
+    assert "origin" in capsys.readouterr().err
+
+
+def test_command_when_gh_is_unusable_is_a_user_error_and_dry_run_is_not(proj, capsys):
+    assert main(["harden", str(proj)]) == 1  # the conftest guard makes gh unusable
+    assert "gh auth status" in capsys.readouterr().err
+    assert main(["harden", str(proj), "--dry-run"]) == 0
 
 
 # --- owner/repo from the git remote ---------------------------------------------------------------
