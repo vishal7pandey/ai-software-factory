@@ -40,7 +40,8 @@ results), Dependabot, secret scanning, and SonarQube where a project exists. The
 * A first sweep (no issue with the label `finding` exists yet) files only `critical` and `high` findings, and at
   most 10 issues in one run. Every later run also files at most 10 new issues.
 * Order: secret-scanning alerts first, then by severity: `critical`, `high`, `medium`, `low` (code scanning:
-  `rule.security_severity_level`, falling back to `rule.severity`; Dependabot: `security_advisory.severity`).
+  `rule.security_severity_level`, falling back to `rule.severity` where `error` counts as high, `warning` as
+  medium and `note` as low; Dependabot: `security_advisory.severity`).
 * The rest is reported to the human as counts per severity, never as an issue per alert. The human decides what
   to file next. Never file the whole backlog "to be safe".
 * Secret values, tokens and keys never go into Jira, a PR or a prompt (`security.md`).
