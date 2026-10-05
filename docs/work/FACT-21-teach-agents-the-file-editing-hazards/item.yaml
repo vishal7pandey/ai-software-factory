@@ -1,0 +1,17 @@
+id: FACT-21
+type: feature
+title: Teach agents the file-editing hazards
+slug: teach-agents-the-file-editing-hazards
+status: implementing
+risk: low
+jira: FACT-21
+branch: feature/fact-21-teach-agents-the-file-editing-hazards
+created: '2026-10-05'
+approvals:
+  spec:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-05'
+  plan:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-05'
+pr: null
