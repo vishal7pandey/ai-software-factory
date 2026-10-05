@@ -2,7 +2,7 @@ id: FACT-34
 type: feature
 title: Findings loop policy and skill
 slug: findings-loop-policy-and-skill
-status: in-review
+status: merged
 risk: medium
 jira: FACT-34
 branch: feature/fact-34-findings-loop-policy-and-skill
@@ -16,4 +16,4 @@ approvals:
     by: Vishal Pandey (delegated to agent)
     at: '2026-10-05'
     delegated: true
-pr: null
+pr: https://github.com/vishal7pandey/ai-software-factory/pull/11
