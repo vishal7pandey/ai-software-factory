@@ -38,5 +38,5 @@ managed:
   .github/skills/factory-spec/SKILL.md: bd18a00c71860132dffcb8a381704af85f54f2f273ed9cbf7f9d99dc3063c96a
   .github/skills/factory-test/SKILL.md: e94329dea50f1ef35827f708929677fec0d33fb9b1b89e80f414e70b7521c9e1
   .github/skills/factory-workflow/SKILL.md: 2e6d93e676774a696e5ae4d4871617926e7618dde01a4c7a0da9549f3f3f04b3
-  .github/workflows/factory-verify.yml: 9d7172aee68d3cb072343b765df7175e86f195f013b27a5ea042b715cee50a3a
+  .github/workflows/factory-verify.yml: dea66c500bfe2a986b5b6a5c7a209d4b157b5d3e0fb10d6af0a6ffddb85130f6
   AGENTS.md#block: 2a83ac8b424cf8f2179ce93a742e4831bb09c04eae8b1649bd2e02833c538d1f
