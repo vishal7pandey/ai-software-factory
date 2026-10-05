@@ -39,11 +39,14 @@ def templates_dir() -> Path:
 
 
 def registry_path() -> Path:
-    return FACTORY_ROOT / "registry" / "projects.yaml"
+    """The project registry lives outside the factory repo (Treaty 3.6).
 
-
-def local_registry_path() -> Path:
-    return FACTORY_ROOT / "registry" / "local.yaml"
+    `FACTORY_REGISTRY` (relative paths resolve against the cwd), else `~/.factory/registry.yaml`.
+    """
+    env = os.environ.get("FACTORY_REGISTRY")
+    if env:
+        return Path(env).expanduser().resolve()
+    return Path.home() / ".factory" / "registry.yaml"
 
 
 def find_project_root(start: Path | str = ".") -> Path:

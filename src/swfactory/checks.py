@@ -234,9 +234,44 @@ def lint_manifest(root: Path) -> list[Finding]:
     return out
 
 
+# The factory is a generic, public tool: instance data (a project registry, tracker hostnames) must
+# not creep back into it. docs/work is the factory's own evidence trail and is not scanned.
+GENERIC_DIRS = ("docs", "kit", "skills", "policies", "templates")
+GENERIC_SKIP = ("docs/work",)
+FORBIDDEN_HOST = "atlassian.net"
+
+
+def lint_generic(root: Path) -> list[Finding]:
+    out: list[Finding] = []
+    if (root / "registry").exists():
+        out.append(
+            Finding(
+                FAIL,
+                "registry/",
+                "the project registry must live outside the repo "
+                "(FACTORY_REGISTRY or ~/.factory/registry.yaml)",
+            )
+        )
+    for d in GENERIC_DIRS:
+        base = root / d
+        if not base.is_dir():
+            continue
+        for f in sorted(p for p in base.rglob("*") if p.is_file()):
+            rel = f.relative_to(root).as_posix()
+            if any(rel == s or rel.startswith(s + "/") for s in GENERIC_SKIP):
+                continue
+            try:
+                text = f.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, OSError):
+                continue
+            if FORBIDDEN_HOST in text:
+                out.append(Finding(FAIL, rel, f"contains `{FORBIDDEN_HOST}`: instance data"))
+    return out
+
+
 def lint_factory(root: Path) -> list[Finding]:
     root = Path(root)
-    return lint_skills(root) + lint_manifest(root)
+    return lint_skills(root) + lint_manifest(root) + lint_generic(root)
 
 
 def format_lint(findings: list[Finding]) -> list[str]:

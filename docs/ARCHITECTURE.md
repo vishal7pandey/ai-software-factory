@@ -49,7 +49,6 @@ ai-software-factory/
 │   ├── ci/          stack CI workflows            ├── workflows/  factory-verify.yml
 │   └── work/        work-item doc templates       └── *.md        AGENTS block, PR template, …
 ├── templates/       stack templates for `factory new`   (V1: python)
-├── registry/        projects.yaml (committed) + local.yaml (gitignored, machine paths)
 ├── src/swfactory/   the CLI.  (package is NOT called `factory` — collides with factory_boy)
 └── tests/
 ```
@@ -114,8 +113,8 @@ jira: null               # Jira key or null
 branch: feature/f-001-add-google-login     # feature/… for features, fix/… for bugs; id lower-cased
 created: 2026-10-04
 approvals:               # key absent until approved
-  spec: {by: "Vishal Pandey", at: "2026-10-04"}
-  plan: {by: "Vishal Pandey", at: "2026-10-05"}
+  spec: {by: "Jane Doe", at: "2026-10-04"}
+  plan: {by: "Jane Doe", at: "2026-10-05"}
 pr: null                 # PR URL once opened
 ```
 
@@ -169,7 +168,7 @@ V1 skills: `factory-workflow` (router), `factory-spec`, `factory-plan`, `factory
 factory_version: 0.1.0
 stack: python                    # python | node | docs | other
 autonomy: supervised             # supervised | trusted
-tracker: {kind: jira, key: SCRUM}   # kind: jira | github | none ; key only for jira
+tracker: {kind: jira, key: PROJ}   # kind: jira | github | none ; key only for jira
 skill_targets: [.claude/skills, .github/skills]
 environments: {dev: null, test: null, prod: null}   # URLs/notes; null = skip that stage
 managed:                         # written by adopt/sync — path → sha256 of installed content
@@ -178,8 +177,20 @@ managed:                         # written by adopt/sync — path → sha256 of 
 
 ### 3.6 Registry
 
-`registry/projects.yaml` (committed): `projects: [{name, repo, stack, tracker: {kind, key}, autonomy, adopted}]`.
-`registry/local.yaml` (gitignored): `paths: {<name>: <absolute path>}`. Machine paths never get committed.
+The registry is **instance data, so it lives outside the factory repo**: one user-level file,
+`$FACTORY_REGISTRY` if set (a relative path resolves against the cwd), else `~/.factory/registry.yaml`.
+Created on the first write (`adopt`, `project add`); a missing file is not an error (`project list`
+says "no registry yet").
+
+```yaml
+projects: [{name, repo, stack, tracker: {kind, key}, autonomy, adopted}]
+paths: {<name>: <absolute path of the local checkout>}
+```
+
+`docs/registry.example.yaml` shows the shape with placeholder values. If the registry cannot be
+written, `adopt` still installs the kit and then exits 1 naming the path. `factory lint` fails when
+a `registry/` directory appears in the repo or an Atlassian cloud site hostname appears under `docs/`
+(except `docs/work/`), `kit/`, `skills/`, `policies/` or `templates/`: the factory stays generic.
 
 ### 3.7 CLI surface
 

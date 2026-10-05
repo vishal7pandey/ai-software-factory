@@ -29,7 +29,7 @@ skills: all
 """
 
 REGISTRY = """\
-# Committed registry header.
+# Registry header.
 projects:
   - name: other
     repo: github.com/me/other
@@ -46,7 +46,16 @@ def _w(path: Path, text: str) -> None:
 
 
 @pytest.fixture
-def factory(tmp_path, monkeypatch) -> Path:
+def reg_file(tmp_path, monkeypatch) -> Path:
+    """The registry lives outside the factory repo: point FACTORY_REGISTRY at a temp file."""
+    path = tmp_path / "home" / "registry.yaml"
+    _w(path, REGISTRY)
+    monkeypatch.setenv("FACTORY_REGISTRY", str(path))
+    return path
+
+
+@pytest.fixture
+def factory(tmp_path, monkeypatch, reg_file) -> Path:
     root = tmp_path / "factory"
     _w(root / "kit" / "manifest.yaml", MANIFEST)
     _w(root / "kit" / "AGENTS.block.md", "## Factory\nUse the skills.\n")
@@ -60,7 +69,6 @@ def factory(tmp_path, monkeypatch) -> Path:
     _w(root / "skills" / "factory-a" / "SKILL.md", "---\nname: factory-a\n---\nA v1\n")
     _w(root / "skills" / "factory-b" / "SKILL.md", "---\nname: factory-b\n---\nB v1\n")
     _w(root / "skills" / "factory-b" / "references" / "ref.md", "ref v1\n")
-    _w(root / "registry" / "projects.yaml", REGISTRY)
     _w(root / "templates" / "python" / "pyproject.toml", 'name = "{{name}}"\npkg = "{{package}}"\n')
     _w(root / "templates" / "python" / "src" / "__package__" / "__init__.py", '"""{{name}}"""\n')
     _w(root / "templates" / "python" / "README.md", "# {{name}}\n")
@@ -142,15 +150,14 @@ def test_adopt_is_idempotent(factory, proj, capsys):
     assert snapshot(proj) == before
 
 
-def test_dry_run_writes_nothing(factory, proj, capsys):
-    reg_before = (factory / "registry" / "projects.yaml").read_bytes()
+def test_dry_run_writes_nothing(factory, reg_file, proj, capsys):
+    reg_before = reg_file.read_bytes()
     before = snapshot(proj)
     assert run("adopt", str(proj), "--dry-run") == 0
     out = capsys.readouterr().out
     assert "CREATE" in out and ".factory/factory.yaml" in out
     assert snapshot(proj) == before
-    assert (factory / "registry" / "projects.yaml").read_bytes() == reg_before
-    assert not (factory / "registry" / "local.yaml").exists()
+    assert reg_file.read_bytes() == reg_before
 
 
 def test_dry_run_lists_skip_and_block(factory, proj, capsys):
@@ -351,20 +358,20 @@ def test_stack_autodetect(factory, tmp_path):
 
 
 def test_tracker_and_autonomy_flags(factory, proj):
-    run("adopt", str(proj), "--tracker", "jira", "--jira-key", "SCRUM", "--autonomy", "trusted")
+    run("adopt", str(proj), "--tracker", "jira", "--jira-key", "PROJ", "--autonomy", "trusted")
     cfg = config(proj)
-    assert cfg["tracker"] == {"kind": "jira", "key": "SCRUM"}
+    assert cfg["tracker"] == {"kind": "jira", "key": "PROJ"}
     assert cfg["autonomy"] == "trusted"
 
 
 def test_existing_config_wins_unless_flag_passed(factory, proj):
-    run("adopt", str(proj), "--tracker", "jira", "--jira-key", "SCRUM", "--autonomy", "trusted")
+    run("adopt", str(proj), "--tracker", "jira", "--jira-key", "PROJ", "--autonomy", "trusted")
     run("adopt", str(proj))
     cfg = config(proj)
-    assert cfg["tracker"] == {"kind": "jira", "key": "SCRUM"} and cfg["autonomy"] == "trusted"
+    assert cfg["tracker"] == {"kind": "jira", "key": "PROJ"} and cfg["autonomy"] == "trusted"
     run("adopt", str(proj), "--autonomy", "supervised")
     cfg = config(proj)
-    assert cfg["autonomy"] == "supervised" and cfg["tracker"]["key"] == "SCRUM"
+    assert cfg["autonomy"] == "supervised" and cfg["tracker"]["key"] == "PROJ"
 
 
 @pytest.mark.parametrize(
@@ -410,36 +417,34 @@ def test_non_git_dir_warns_but_adopts(factory, tmp_path, capsys):
 # --- registry ----------------------------------------------------------------------------------
 
 
-def test_adopt_upserts_registry_and_local_paths(factory, proj):
+def test_adopt_upserts_registry_and_paths(factory, reg_file, proj):
     subprocess.run(
         ["git", "remote", "add", "origin", "https://github.com/me/proj.git"], cwd=proj, check=True
     )
-    run("adopt", str(proj), "--tracker", "jira", "--jira-key", "SCRUM")
-    reg_file = factory / "registry" / "projects.yaml"
-    assert reg_file.read_text(encoding="utf-8").startswith("# Committed registry header.\n")
-    entries = {p["name"]: p for p in common.load_yaml(reg_file)["projects"]}
+    run("adopt", str(proj), "--tracker", "jira", "--jira-key", "PROJ")
+    assert reg_file.read_text(encoding="utf-8").startswith("# Registry header.\n")
+    data = common.load_yaml(reg_file)
+    entries = {p["name"]: p for p in data["projects"]}
     assert entries["other"]["adopted"] is False  # untouched
     e = entries["proj"]
     assert e == {
         "name": "proj",
         "repo": "github.com/me/proj",
         "stack": "python",
-        "tracker": {"kind": "jira", "key": "SCRUM"},
+        "tracker": {"kind": "jira", "key": "PROJ"},
         "autonomy": "supervised",
         "adopted": True,
     }
-    local = common.load_yaml(factory / "registry" / "local.yaml")
-    assert local["paths"]["proj"] == str(proj.resolve())
+    assert data["paths"]["proj"] == str(proj.resolve())
 
     run("adopt", str(proj))  # upsert, not duplicate
     assert [p["name"] for p in common.load_yaml(reg_file)["projects"]].count("proj") == 1
 
 
-def test_adopt_keeps_existing_registry_fields(factory, tmp_path):
+def test_adopt_keeps_existing_registry_fields(factory, reg_file, tmp_path):
     p = tmp_path / "other"
     p.mkdir()
     git_init(p)
-    reg_file = factory / "registry" / "projects.yaml"
     reg = common.load_yaml(reg_file)
     reg["projects"][0]["note"] = "keep me"
     common.dump_yaml(reg, reg_file)
@@ -462,7 +467,7 @@ def test_normalise_repo_url(url, expected):
     assert installer.normalise_repo_url(url) == expected
 
 
-def test_project_add_list_remove(factory, tmp_path, capsys):
+def test_project_add_list_remove(factory, reg_file, tmp_path, capsys):
     checkout = tmp_path / "checkout"
     checkout.mkdir()
     run(
@@ -480,17 +485,17 @@ def test_project_add_list_remove(factory, tmp_path, capsys):
     other = next(line for line in lines if line.startswith("other"))
     assert other.rstrip().endswith("-")
 
-    entries = common.load_yaml(factory / "registry" / "projects.yaml")["projects"]
+    data = common.load_yaml(reg_file)
+    entries = data["projects"]
     assert entries[-1]["repo"] == "github.com/me/newproj" and entries[-1]["adopted"] is False
+    assert data["paths"]["newproj"] == str(checkout.resolve())
 
     with pytest.raises(FactoryError, match="already registered"):
         run("project", "add", "newproj")
     run("project", "remove", "newproj")
-    names = [
-        p["name"] for p in common.load_yaml(factory / "registry" / "projects.yaml")["projects"]
-    ]
-    assert names == ["other"]
-    assert "newproj" not in common.load_yaml(factory / "registry" / "local.yaml")["paths"]
+    data = common.load_yaml(reg_file)
+    assert [p["name"] for p in data["projects"]] == ["other"]
+    assert "newproj" not in data["paths"]
     with pytest.raises(FactoryError, match="not registered"):
         run("project", "remove", "newproj")
 
@@ -498,7 +503,7 @@ def test_project_add_list_remove(factory, tmp_path, capsys):
 # --- new ---------------------------------------------------------------------------------------
 
 
-def test_new_substitutes_renames_inits_and_adopts(factory, tmp_path):
+def test_new_substitutes_renames_inits_and_adopts(factory, reg_file, tmp_path):
     out_dir = tmp_path / "work"
     assert run("new", "My-App", "--stack", "python", "--dir", str(out_dir)) == 0
     p = out_dir / "My-App"
@@ -515,10 +520,7 @@ def test_new_substitutes_renames_inits_and_adopts(factory, tmp_path):
     assert (p / "AGENTS.md").is_file()
     log = subprocess.run(["git", "log"], cwd=p, capture_output=True, text=True)
     assert log.returncode != 0  # nothing committed
-    names = [
-        e["name"] for e in common.load_yaml(factory / "registry" / "projects.yaml")["projects"]
-    ]
-    assert "My-App" in names
+    assert "My-App" in [e["name"] for e in common.load_yaml(reg_file)["projects"]]
 
 
 @pytest.mark.parametrize("bad", ["1app", "___", "a/b", ".."])

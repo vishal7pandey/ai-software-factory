@@ -18,11 +18,7 @@ def sh(*args, cwd):
 
 @pytest.fixture
 def app(tmp_path, monkeypatch):
-    reg = tmp_path / "reg"
-    reg.mkdir()
-    (reg / "projects.yaml").write_text("projects: []\n", encoding="utf-8")
-    monkeypatch.setattr(common, "registry_path", lambda: reg / "projects.yaml")
-    monkeypatch.setattr(common, "local_registry_path", lambda: reg / "local.yaml")
+    monkeypatch.setenv("FACTORY_REGISTRY", str(tmp_path / "reg" / "registry.yaml"))
     p = tmp_path / "app"
     p.mkdir()
     (p / "pyproject.toml").write_text('[project]\nname = "app"\n', encoding="utf-8")

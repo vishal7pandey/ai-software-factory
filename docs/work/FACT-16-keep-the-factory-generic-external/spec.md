@@ -1,6 +1,6 @@
 # FACT-16 — Keep the factory generic: external project registry
 
-Status: draft · Risk: low · Jira: FACT-16
+Status: in-review · Risk: low · Jira: FACT-16
 Created: 2026-10-04 · Slug: keep-the-factory-generic-external
 
 ## Problem
@@ -25,7 +25,7 @@ The factory maintainer (single user) and any agent running `factory adopt` or `f
 - R4. When the file does not exist, `project list` prints one line saying there is no registry yet and exits 0. Nothing else fails because the file is missing.
 - R5. The repo ships `docs/registry.example.yaml` with neutral placeholder entries, and ARCHITECTURE.md (section 3.6 and the repository tree) and `docs/jira-workflow.md` describe R1 and R2.
 - R6. Examples in docs and fixtures in tests use neutral names (person `Jane Doe`, key `PROJ-123`, projects such as `sample-app`).
-- R7. `factory lint` fails if the repo contains a `registry/` directory, or if a file under `docs/`, `kit/`, `skills/`, `policies/` or `templates/` contains an `atlassian.net` hostname.
+- R7. `factory lint` fails if the repo contains a `registry/` directory, or if a file under `docs/` (except `docs/work/`), `kit/`, `skills/`, `policies/` or `templates/` contains an `atlassian.net` hostname.
 
 ## Acceptance criteria
 
@@ -33,7 +33,7 @@ The factory maintainer (single user) and any agent running `factory adopt` or `f
 - AC2. With no environment variable and no file, `project list` exits 0 with the "no registry yet" message; after `adopt`, the file exists at `~/.factory/registry.yaml` (home directory redirected in the test).
 - AC3. The repository has no `registry/` directory, and `.gitignore` no longer mentions `registry/local.yaml`.
 - AC4. `factory lint` passes on the repo and fails on fixtures that contain a `registry/` directory or an `atlassian.net` hostname in a skill.
-- AC5. A search of the tracked files for the maintainer's name, the former Jira key and the real project names finds hits only in the factory's own adoption files (`.factory/`, `.claude/`, `.github/`) and in this work item's documents.
+- AC5. A search of the tracked files for the maintainer's name, the former Jira key and the real project names finds hits only in the factory's own adoption files (`.factory/`, `.claude/`, `.github/`), `docs/work/`, `LICENSE` (copyright holder) and the lint rule's own hostname literal and tests (amended, see notes.md).
 - AC6. All existing tests pass, updated for the new location, on Windows and Linux (CI).
 
 ## Edge cases and failure modes

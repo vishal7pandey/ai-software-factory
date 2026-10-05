@@ -1,6 +1,6 @@
 # FACT-16 — Keep the factory generic: external project registry
 
-Status: draft · Risk: low · Jira: FACT-16
+Status: in-review · Risk: low · Jira: FACT-16
 Created: 2026-10-04 · Slug: keep-the-factory-generic-external · Spec: spec.md
 
 ## Summary
