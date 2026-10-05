@@ -31,4 +31,8 @@ A human records approval with `factory approve <id> spec|plan`, which writes `ap
 {by, at}` into `item.yaml`. Or the human edits that entry by hand. It is a ledger, not a lock: the lock is
 branch protection and code-owner review on `docs/work/`. CI (`factory-verify`) flags inconsistencies.
 
+When the owner has explicitly delegated an approval to an agent, it is recorded with
+`factory approve <id> spec|plan --delegated "<owner>"` (`by: "<owner> (delegated to agent)"`, `delegated: true`);
+`factory status` marks such items. See `.factory/policies/autonomy.md`.
+
 Rules: [.factory/policies/](../../.factory/policies/). Method: skill `factory-workflow`.

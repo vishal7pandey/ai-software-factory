@@ -34,7 +34,8 @@ deliberately in the same commit.
 `factory approve` is a **ledger, not a lock**. It records who approved what and when; an agent with
 shell access could also type it. The lock is GitHub: branch protection + required review on the PR,
 with `docs/work/**` covered by CODEOWNERS, plus the `verify` check in CI. Policy
-(`policies/autonomy.md`) forbids agents from running `approve`; CI makes violations visible.
+(`policies/autonomy.md`) forbids agents from running `approve` except under an explicit, recorded owner
+delegation, which is written in the distinguishable `--delegated` form; CI makes violations visible.
 
 ## 2. Repository anatomy
 
@@ -114,7 +115,7 @@ branch: feature/f-001-add-google-login     # feature/… for features, fix/… f
 created: 2026-10-04
 approvals:               # key absent until approved
   spec: {by: "Jane Doe", at: "2026-10-04"}
-  plan: {by: "Jane Doe", at: "2026-10-05"}
+  plan: {by: "Jane Doe (delegated to agent)", at: "2026-10-05", delegated: true}   # delegated form, below
 pr: null                 # PR URL once opened
 ```
 
@@ -132,6 +133,11 @@ pr: null                 # PR URL once opened
   `plan.md`, the agent amends it, records why in `notes.md`, and asks the human to re-run
   `approve <id> spec|plan`. Re-approval is allowed at any status up to `in-review`; it refreshes
   `approvals.<kind>` (new `by`/`at`) and never moves status backwards.
+* **Delegated approval.** When the owner has explicitly delegated a gate to agents (a recorded instruction
+  naming the gate and the scope; never production), the agent records it with
+  `approve <id> spec|plan --delegated "<owner>"`: `by: "<owner> (delegated to agent)"`, `delegated: true`.
+  `verify` accepts that form and the same wording written by hand, and rejects a non-boolean `delegated` or
+  `delegated: true` without the suffix; `status` marks such items `(delegated)`. Rules: `policies/autonomy.md`.
 * **Autonomy** (`factory.yaml › autonomy`): `supervised` (default) requires spec **and** plan approvals.
   `trusted` waives the plan approval for `risk: low` items only. Anything else is a config error.
   `verify` and `approve` both read this; the rule lives in one function (`required_approvals`).
@@ -211,7 +217,7 @@ error (`FactoryError`, message to stderr), 2 usage. No command may require netwo
 | `feature start <title> [--jira KEY] [--risk] [--no-branch] [--run AGENT]` | `commands/work.py` | scaffold work item + branch + handoff prompt |
 | `bug start <title> …` | `commands/work.py` | same, bug templates |
 | `status [--all]` | `commands/work.py` | table of work items: id, type, status, branch, next step |
-| `approve <id> spec\|plan [--yes]` | `commands/work.py` | human gate ledger |
+| `approve <id> spec\|plan [--yes] [--delegated WHO]` | `commands/work.py` | human gate ledger; `--delegated` records an owner-delegated approval (3.2) |
 | `advance <id> <status>` | `commands/work.py` | forward-only status moves |
 | `next <id> [--run claude\|copilot]` | `commands/work.py` | print (or launch) the prompt for the next step given status |
 | `verify [...]` | `commands/work.py` → `swfactory/verify.py` | the CI gate (3.3) |
