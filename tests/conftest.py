@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from swfactory import adopt_inspect, common
+from swfactory import adopt_inspect, common, harden
 
 # The developer's real home, captured at import time, before any test can redirect it. The registry
 # is user-level data outside the repo (Treaty 3.6): no test may read or write it (FACT-18).
@@ -50,3 +50,11 @@ def no_project_commands(monkeypatch, request):
     if request.node.get_closest_marker("real_runner"):
         return
     monkeypatch.setattr(adopt_inspect, "run_shell", lambda cmd, cwd: (0, ""))
+
+
+@pytest.fixture(autouse=True)
+def no_real_gh(monkeypatch):
+    """`factory harden`, `doctor` and `adopt` talk to GitHub through `harden.gh_api`. The suite never
+    reaches the network: the one function that starts `gh` answers "gh unusable" (FACT-33). A test
+    that wants GitHub answers passes its own runner or monkeypatches `harden.gh_api`."""
+    monkeypatch.setattr(harden, "_run_gh", lambda argv, stdin: (127, ""))
