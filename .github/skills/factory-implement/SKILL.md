@@ -22,10 +22,11 @@ description: Use when a work item has an approved plan (status plan-approved or 
 3. **Run the baseline.** Run the full lint + test commands before touching code. If they fail already, record it in `notes.md` and tell the human before proceeding; do not fix unrelated failures silently.
 4. **Work task by task**, in plan order. For each task in `plan.md`:
    1. Re-read the ACs it `Serves` and its `Verify by`.
-   2. **Test first where a test can be written:** write the failing test (red), watch it fail for the right reason, write the minimal code (green), then refactor with tests green. Where test-first is impractical (config, wiring, docs, UI polish), say why in the commit body and add the test after.
-   3. Run lint/format and the relevant tests, then the full suite; all green before committing.
-   4. Update `test-plan.md`: fill the row for each AC served with the actual test name(s)/file and status. Tick the task off in `plan.md` (checkbox or "done" note).
-   5. Commit: one logical change, conventional message referencing the id, e.g. `feat(F-001): reject expired tokens` with body "Serves AC2, AC3". Include code, tests and the doc updates in the same commit.
+   2. **Edit with the editor tools.** Change files with the agent's own edit/write tools. Never rewrite files with inline scripts (a Python, `sed` or `awk` one-liner or heredoc run through a shell): backslashes and escapes (`\n`, `\b`, regexes, Windows paths) get silently changed, and the damage can be invisible (control characters, altered newlines). If a scripted edit is unavoidable, re-read every changed line afterwards and diff it.
+   3. **Test first where a test can be written:** write the failing test (red), watch it fail for the right reason, write the minimal code (green), then refactor with tests green. Where test-first is impractical (config, wiring, docs, UI polish), say why in the commit body and add the test after.
+   4. Run lint/format and the relevant tests, then the full suite; all green before committing.
+   5. Update `test-plan.md`: fill the row for each AC served with the actual test name(s)/file and status. Tick the task off in `plan.md` (checkbox or "done" note).
+   6. Commit: one logical change, conventional message referencing the id, e.g. `feat(F-001): reject expired tokens` with body "Serves AC2, AC3". Include code, tests and the doc updates in the same commit. Stage explicit paths (`git add <file> <file>`), never `git add -A`, `git add .` or `git commit -a`: they sweep unrelated uncommitted changes into your commit. Check `git status` and `git diff --cached --stat` before committing.
 5. **Stay in scope.** Diff only what the task needs. Unrelated bugs, smells, upgrades or TODOs you notice go in `notes.md` as one line each (file, what, why), not into this diff. No drive-by reformatting. No new dependency unless the plan names it.
 6. **Tests are sacred.** Never weaken, skip, loosen or delete a test or assertion to get green, and never mock away the thing under test. If a test fails, find out why: your code is wrong, the test was wrong (justify it in the commit body and `notes.md`), or the spec changed (step 7). No secrets, tokens or real personal data in code, fixtures, logs or commits.
 7. **Blocked, or plan proves wrong?** If a task is impossible, much bigger than planned, or contradicts the spec: stop coding. Record what you found and the options in `notes.md`, commit the state, and ask the human. Amend `plan.md` (or the spec via `factory-spec`) and ask for re-approval; do not continue on a divergent plan. Small deviations that keep every AC intact (e.g. a helper renamed): note them in `plan.md` and the commit.
@@ -48,5 +49,6 @@ description: Use when a work item has an approved plan (status plan-approved or 
 - Never start without the required approvals in `item.yaml`; never run `factory approve` or write `approvals:`. If an approval is missing, ask the human to approve the artifact and stop.
 - Never merge the PR, push to `main`, or deploy; those are human gates.
 - Never use `--no-verify`, force-push shared branches, or bypass hooks/CI.
+- Never rewrite files with inline scripts, and never stage with `git add -A`; use the editor tools and explicit paths (step 4).
 - Never fix unrelated things in the same diff.
 - Never carry on when the plan or spec proves wrong; stop, record, ask.

@@ -59,6 +59,18 @@ _SKILL_NAME = re.compile(r"(?<![A-Za-z0-9_])factory-[a-z0-9]+(?:-[a-z0-9]+)*")
 _FILE_EXT = re.compile(r"\.(?:ya?ml|py|md|json|toml|txt)\b")
 
 
+# Rules a named skill must keep carrying (FACT-21): label and a case-insensitive pattern each.
+REQUIRED_RULES: dict[str, list[tuple[str, re.Pattern[str]]]] = {
+    "factory-implement": [
+        (
+            "file-editing hazard rule (never rewrite files with inline scripts)",
+            re.compile(r"inline script", re.I),
+        ),
+        ("explicit-staging rule (never `git add -A`)", re.compile(r"git add -A")),
+    ],
+}
+
+
 def _skill_findings(skill_dir: Path, all_names: set[str], root: Path) -> list[Finding]:
     rel = skill_dir.relative_to(root).as_posix() + "/SKILL.md"
     out: list[Finding] = []
@@ -129,6 +141,10 @@ def _skill_findings(skill_dir: Path, all_names: set[str], root: Path) -> list[Fi
     for ref_name in dict.fromkeys(m.group(0) for m in mentioned):  # skips e.g. factory-verify.yml
         if ref_name not in all_names:
             fail(f"references unknown skill {ref_name!r}")
+
+    for label, pattern in REQUIRED_RULES.get(name, []):
+        if not pattern.search(text):
+            fail(f"missing required rule: {label}")
 
     if "docs/work/" not in text:
         out.append(Finding(WARN, rel, "never mentions docs/work/"))

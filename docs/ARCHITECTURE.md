@@ -159,7 +159,8 @@ with these H2 sections, in order: `## When to use`, `## Inputs`, `## Steps`, `##
 `## Definition of done`, `## Never`. Optional `references/` dir for long material.
 Rules: reference work-item paths and statuses exactly as in 3.2; never tell an agent to run
 `approve`; mention the CLI only as optional ("or edit `item.yaml` by hand"). `factory lint` enforces
-the mechanical parts.
+the mechanical parts, and that `factory-implement` keeps carrying the file-editing rule (editor tools,
+never inline scripts) and the explicit-staging rule (never `git add -A`).
 
 V1 skills: `factory-workflow` (router), `factory-spec`, `factory-plan`, `factory-implement`,
 `factory-test`, `factory-review`, `factory-diagnose`, `factory-release`.
