@@ -564,9 +564,17 @@ EXPECTED_NEXT = {
 }
 
 
+def set_environments(project, **envs):
+    cfg = project / ".factory" / "factory.yaml"
+    cfg.write_text(
+        yaml.safe_dump({"autonomy": "supervised", "environments": envs}), encoding="utf-8"
+    )
+
+
 @pytest.mark.parametrize("status", STATUSES)
 def test_next_prompt_per_status(project, capsys, status):
     run("feature", "start", "Add login", "--no-branch")
+    set_environments(project, dev="https://dev.example.test")  # `merged` routes to release
     set_status(project, "F-001", status)
     capsys.readouterr()
     assert run("next", "F-001") == 0
@@ -582,12 +590,54 @@ def test_next_prompt_per_status(project, capsys, status):
     human = {
         "draft": "Next human step: factory approve F-001 spec",
         "spec-approved": "Next human step: factory approve F-001 plan",
-        "in-review": "Next human step: merge the PR",
+        "in-review": "Next human step: merge the PR (last commit on its branch: factory advance",
     }
     if status in human:
         assert human[status] in out
     else:
         assert "Next human step" not in out
+
+
+def test_next_merged_without_environments(project, capsys):
+    run("feature", "start", "Add login", "--no-branch")
+    set_environments(project, dev=None, test=None, prod=None)
+    set_status(project, "F-001", "merged")
+    capsys.readouterr()
+    assert run("next", "F-001") == 0
+    assert "Nothing to do" in capsys.readouterr().out
+    set_status(project, "F-001", "released")  # the rule is only for `merged`
+    assert run("next", "F-001") == 0
+    assert "factory-release" in capsys.readouterr().out
+
+
+def test_merged_is_complete_without_environments(project, capsys):
+    run("feature", "start", "Merged one", "--no-branch")
+    run("feature", "start", "Done one", "--no-branch")
+    run("feature", "start", "In review", "--no-branch")
+    set_status(project, "F-001", "merged")
+    set_status(project, "F-002", "done")
+    set_status(project, "F-003", "in-review")
+    capsys.readouterr()
+    run("status")
+    out = capsys.readouterr().out
+    assert "F-003" in out and "F-001" not in out and "F-002" not in out
+    run("status", "--all")
+    rows = {line.split()[0]: line for line in capsys.readouterr().out.splitlines()[1:]}
+    assert "complete (no environments to release to)" in rows["F-001"]
+    assert "F-002" in rows and "F-003" in rows
+
+
+def test_merged_routes_to_release_with_an_environment(project, capsys):
+    run("feature", "start", "Merged one", "--no-branch")
+    set_status(project, "F-001", "merged")
+    set_environments(project, dev="https://dev.example.test", test=None)
+    capsys.readouterr()
+    run("status")
+    out = capsys.readouterr().out
+    assert "F-001" in out and "factory-release" in out
+    set_environments(project, dev=None, test=None)  # keys present but null: not configured
+    run("status")
+    assert "F-001" not in capsys.readouterr().out
 
 
 def test_next_for_bug_draft_uses_diagnose(project, capsys):
