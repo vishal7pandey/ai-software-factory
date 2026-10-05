@@ -153,6 +153,19 @@ def test_state_when_gh_is_unusable_everything_is_unknown():
     assert "gh unavailable" in st.protections[0].detail
 
 
+def test_state_gh_dying_midway_is_unknown_never_off():
+    """`off` fails doctor on a public repo, so a read that did not happen must not look like it."""
+    real = FakeGh()
+
+    def dies_after_the_repo_read(method, path, body=None):
+        return real(method, path, body) if path == BASE else (0, None)
+
+    st = harden.read_state("me", "proj", dies_after_the_repo_read)
+    assert st.get(harden.SECRET).state == harden.OK
+    for key in (harden.ALERTS, harden.UPDATES, harden.CODEQL):
+        assert (st.get(key).state, st.get(key).detail) == (harden.UNKNOWN, "gh unavailable")
+
+
 def test_state_a_failing_read_is_unknown_with_its_status():
     gh = FakeGh(fail={("GET", "/automated-security-fixes"): 500})
     st = harden.read_state("me", "proj", gh)
