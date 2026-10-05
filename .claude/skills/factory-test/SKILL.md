@@ -45,7 +45,7 @@ description: Use when a work item is at status plan-approved and needs test-plan
 2. **Mutation sanity check per row:** temporarily break the behaviour (flip a condition, return a constant, delete the guard), run only that test, confirm it fails for the right reason, then restore with `git checkout -- <file>` / `git stash` and re-run to confirm green. If you cannot safely mutate, write the concrete reason the test would fail (which assertion, on what value).
 3. Reject tests that cannot fail: no assertion, assert on a mock you just configured, `assert True`, exceptions swallowed, tests skipped/xfail, assertions only on "no error".
 4. Confirm happy/boundary/negative cases listed actually exist in code. Missing ones: add them (or hand back to the implementer) before verifying.
-5. Run the full suite and the project linter. Set Status=`verified` only for rows that pass the mutation check. Write results in the "Audit" section.
+5. Run the full suite and the project linter. Set Status=`verified` only for rows that pass the mutation check. Write results in the "Audit" section: `verify` (FACT-5) prints a `WARN <id>: ...` line (never failing the gate) when an item at `in-review` or later still has the template placeholder there, so leaving it empty does not pass silently.
 
 ## Output
 

@@ -298,6 +298,48 @@ def check_project(
     return problems
 
 
+# --- warnings (never fail the gate) ------------------------------------------------------------
+
+_HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+
+
+def audit_is_placeholder(text: str) -> bool:
+    """True when `test-plan.md` has an `## Audit` section that is empty apart from comments."""
+    lines = text.splitlines()
+    start = next((i for i, ln in enumerate(lines) if ln.startswith("## Audit")), None)
+    if start is None:
+        return False
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+    body = "\n".join(lines[start + 1 : end])
+    return not _HTML_COMMENT_RE.sub("", body).strip()
+
+
+def warn_project(root: Path | str) -> list[str]:
+    """Warnings as '<id>: <reason>' (run() prefixes 'WARN '). They never change the exit code.
+
+    An item at `in-review` or later whose test-plan Audit is still the template placeholder."""
+    root = Path(root)
+    out: list[str] = []
+    work = root / "docs" / "work"
+    item_files = sorted(work.glob("*/item.yaml")) if work.is_dir() else []
+    for path in item_files:
+        try:
+            item = load_item(path)
+            if validate_item(item, path.parent.name):
+                continue
+            if STATUSES.index(item["status"]) < STATUSES.index("in-review"):
+                continue
+            text = (path.parent / "test-plan.md").read_text(encoding="utf-8-sig")
+        except (ValueError, OSError, UnicodeDecodeError):
+            continue
+        if audit_is_placeholder(text):
+            out.append(
+                f"{item['id']}: status is {item['status']} but the Audit section of "
+                "test-plan.md is still the template placeholder"
+            )
+    return out
+
+
 # --- CLI ---------------------------------------------------------------------------------------
 
 
@@ -334,9 +376,16 @@ def run(args: argparse.Namespace) -> int:
     root = Path(args.root)
     branch = args.branch if args.branch else current_branch(root)
     problems = check_project(root, branch, read_changed_files(args.changed_files_from))
+    warnings = warn_project(root)
+    for w in warnings:
+        print(f"WARN {w}")
     for p in problems:
         print(f"FAIL {p}")
-    print("verify: OK" if not problems else f"verify: {len(problems)} problem(s)")
+    if problems:
+        print(f"verify: {len(problems)} problem(s)")
+    else:
+        suffix = f" ({len(warnings)} warning(s))" if warnings else ""
+        print(f"verify: OK{suffix}")
     return 1 if problems else 0
 
 
