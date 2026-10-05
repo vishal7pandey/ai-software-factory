@@ -2,7 +2,7 @@ id: FACT-20
 type: feature
 title: Record merged status in the PR's last commit
 slug: record-merged-status-in-the-pr-s-last
-status: implementing
+status: in-review
 risk: low
 jira: FACT-20
 branch: feature/fact-20-record-merged-status-in-the-pr-s-last
