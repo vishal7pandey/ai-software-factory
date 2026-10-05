@@ -2,7 +2,7 @@ id: FACT-5
 type: feature
 title: Enforce small commits and the test-plan Audit section
 slug: enforce-small-commits-and-the-test-plan
-status: in-review
+status: merged
 risk: low
 jira: FACT-5
 branch: feature/fact-5-enforce-small-commits-and-the-test-plan
@@ -14,4 +14,4 @@ approvals:
   plan:
     by: Vishal Pandey (delegated to agent)
     at: '2026-10-05'
-pr: null
+pr: https://github.com/vishal7pandey/ai-software-factory/pull/10
