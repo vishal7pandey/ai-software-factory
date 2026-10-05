@@ -89,7 +89,8 @@ for 4xx; `automated-security-fixes` returns JSON, `vulnerability-alerts` returns
 ## Edge cases and failure modes
 
 - No `origin` remote, or a non-github.com remote: `harden` exits 1 with a clear message; `adopt` prints
-  one line and succeeds; `doctor` reports `unknown`, not a failure.
+  one line and succeeds; `doctor` prints one `ok`-level line saying the check was skipped (there is
+  nothing on GitHub to check, and a local-only project must keep a clean doctor), never a failure.
 - `gh` not installed, not logged in, timeout: runner returns status 0; every protection is `unknown`;
   `harden` without `--dry-run` exits 1 ("cannot read the repository settings"), with `--dry-run` it
   prints the plan with unknown states and exits 0.

@@ -18,6 +18,7 @@ import yaml
 
 from swfactory import __version__
 from swfactory import common as _common
+from swfactory import harden as _harden
 from swfactory import installer as _installer
 from swfactory.common import FactoryError
 
@@ -468,6 +469,32 @@ def check_project(
         out.append(Finding(OK, "git", "repository found"))
     else:
         out.append(Finding(WARN, "git", "no .git directory - not a git repository"))
+    return out
+
+
+def check_protections(root: Path | str, gh: _harden.Gh | None = None) -> list[Finding]:
+    """The four repository protections (FACT-33): ok / off / unknown, plus not available.
+
+    `off` fails on a public repo (a protection that was never turned on or was turned off), warns
+    on a private one. `unknown` (gh unusable, no admin) and `not available` only warn: this check
+    cannot tell whether the protection is missing. A project with no GitHub remote has nothing on
+    GitHub to check: one OK line says it was skipped."""
+    try:
+        owner, repo = _harden.repo_slug(root)
+    except FactoryError:
+        return [Finding(OK, "repo protections", "skipped (no github.com origin remote)")]
+    state = _harden.read_state(owner, repo, gh or _harden.gh_api)
+    out: list[Finding] = []
+    for p in state.protections:
+        detail = p.state + (f" ({p.detail})" if p.detail else "")
+        if p.state == _harden.OK:
+            level = OK
+        elif p.state == _harden.OFF:
+            level = FAIL if state.private is False else WARN
+            detail += " - `factory harden` turns it on"
+        else:
+            level = WARN
+        out.append(Finding(level, f"repo: {_harden.LABELS[p.key]}", detail))
     return out
 
 

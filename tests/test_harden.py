@@ -10,7 +10,7 @@ import subprocess
 
 import pytest
 
-from swfactory import common, harden
+from swfactory import __version__, common, harden
 from swfactory.cli import main
 from swfactory.common import FactoryError
 
@@ -367,6 +367,80 @@ def test_command_when_gh_is_unusable_is_a_user_error_and_dry_run_is_not(proj, ca
     assert main(["harden", str(proj)]) == 1  # the conftest guard makes gh unusable
     assert "gh auth status" in capsys.readouterr().err
     assert main(["harden", str(proj), "--dry-run"]) == 0
+
+
+# --- doctor ---------------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def adopted(proj):
+    common.dump_yaml(
+        {"factory_version": __version__, "stack": "python", "skill_targets": [], "managed": {}},
+        proj / ".factory" / "factory.yaml",
+    )
+    return proj
+
+
+def protection_lines(out):
+    return [ln for ln in out.splitlines() if "repo:" in ln]
+
+
+def test_doctor_all_on_prints_four_ok_lines(adopted, monkeypatch, capsys):
+    monkeypatch.setattr(harden, "gh_api", FakeGh())
+    assert main(["doctor", str(adopted)]) == 0
+    lines = protection_lines(capsys.readouterr().out)
+    assert len(lines) == 4 and all(ln.startswith("OK ") and ln.endswith("ok") for ln in lines)
+
+
+def test_doctor_off_on_a_public_repo_fails(adopted, monkeypatch, capsys):
+    monkeypatch.setattr(harden, "gh_api", FakeGh(alerts=False))
+    assert main(["doctor", str(adopted)]) == 1
+    out = capsys.readouterr().out
+    (off,) = [ln for ln in protection_lines(out) if "dependabot alerts" in ln]
+    assert off.startswith("FAIL") and " off " in off and "factory harden" in off
+    assert "doctor: 1 failure(s)" in out
+    assert sum(ln.startswith("OK ") for ln in protection_lines(out)) == 3
+
+
+def test_doctor_off_on_a_private_repo_only_warns(adopted, monkeypatch, capsys):
+    monkeypatch.setattr(harden, "gh_api", FakeGh(private=True, codeql=False))
+    assert main(["doctor", str(adopted)]) == 0
+    (off,) = [ln for ln in protection_lines(capsys.readouterr().out) if "codeql" in ln]
+    assert off.startswith("WARN") and " off " in off
+
+
+def test_doctor_unknown_when_gh_fails(adopted, capsys):
+    assert main(["doctor", str(adopted)]) == 0  # the conftest guard makes gh unusable
+    lines = protection_lines(capsys.readouterr().out)
+    assert len(lines) == 4 and all(ln.startswith("WARN") and "unknown" in ln for ln in lines)
+
+
+def test_doctor_unknown_on_http_401(adopted, monkeypatch, capsys):
+    monkeypatch.setattr(harden, "gh_api", lambda m, p, b=None: (401, {"message": MARKER}))
+    assert main(["doctor", str(adopted)]) == 0
+    out = capsys.readouterr().out
+    assert sum("unknown" in ln for ln in protection_lines(out)) == 4
+    assert "HTTP 401" in out and MARKER not in out
+
+
+@pytest.mark.parametrize("remote", [None, "https://gitlab.com/me/proj.git"])
+def test_doctor_without_a_github_remote_is_one_skipped_line(tmp_path, capsys, remote):
+    p = git_repo(tmp_path / "noremote", remote)
+    common.dump_yaml(
+        {"factory_version": __version__, "stack": "python", "skill_targets": [], "managed": {}},
+        p / ".factory" / "factory.yaml",
+    )
+    assert main(["doctor", str(p)]) == 0
+    (line,) = [ln for ln in capsys.readouterr().out.splitlines() if "repo protections" in ln]
+    assert line.startswith("OK") and "skipped" in line
+
+
+def test_doctor_does_not_ask_github_about_a_path_that_is_not_adopted(tmp_path, monkeypatch, capsys):
+    gh = FakeGh()
+    monkeypatch.setattr(harden, "gh_api", gh)
+    p = git_repo(tmp_path / "plain", "https://github.com/me/proj.git")
+    assert main(["doctor", str(p)]) == 1  # not adopted
+    assert gh.calls == []
 
 
 # --- owner/repo from the git remote ---------------------------------------------------------------
