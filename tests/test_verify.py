@@ -112,6 +112,23 @@ def test_schema_failures(over, needle):
     assert any(needle in p for p in problems), problems
 
 
+DELEGATED = {"by": "Jane Doe (delegated to agent)", "at": "2026-10-04"}
+
+
+def test_delegated_approval_forms():
+    def problems(spec):
+        return validate_item(make_item(approvals={"spec": spec}), "F-001-add-login")
+
+    assert problems({**DELEGATED, "delegated": True}) == []  # the --delegated form
+    assert problems(DELEGATED) == []  # the older hand-written form, no flag
+    assert problems(APPROVAL) == []  # ordinary approval unchanged
+    assert problems({**APPROVAL, "delegated": False}) == []
+    assert any("must be true or false" in p for p in problems({**DELEGATED, "delegated": "yes"}))
+    assert any("does not end with" in p for p in problems({**APPROVAL, "delegated": True}))
+    assert verify.is_delegated({**DELEGATED, "delegated": True}) and verify.is_delegated(DELEGATED)
+    assert not verify.is_delegated(APPROVAL) and not verify.is_delegated("nope")
+
+
 def test_missing_required_field():
     item = make_item()
     del item["slug"]

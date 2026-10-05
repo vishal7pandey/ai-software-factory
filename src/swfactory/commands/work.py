@@ -36,7 +36,13 @@ def register(subparsers) -> None:
     p.add_argument("id", help="work item id or directory name (case-insensitive)")
     p.add_argument("kind", choices=["spec", "plan"])
     p.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
-    p.set_defaults(func=lambda a: work.cmd_approve(a.id, a.kind, a.yes))
+    p.add_argument(
+        "--delegated",
+        metavar="WHO",
+        help="record an approval the named owner explicitly delegated to an agent "
+        "(by: '<WHO> (delegated to agent)', delegated: true)",
+    )
+    p.set_defaults(func=lambda a: work.cmd_approve(a.id, a.kind, a.yes, delegated=a.delegated))
 
     p = subparsers.add_parser("advance", help="move a work item one status forward")
     p.add_argument("id")

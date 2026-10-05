@@ -10,7 +10,7 @@ import yaml
 
 from swfactory import cli, common, work
 from swfactory.common import FactoryError
-from swfactory.verify import ITEM_KEYS, STATUSES, load_item
+from swfactory.verify import ITEM_KEYS, STATUSES, check_project, load_item
 
 TEMPLATES = {
     "spec.feature.md": (
@@ -287,6 +287,68 @@ def test_approve_spec_happy_path(project, capsys):
     # dates stay quoted strings on disk
     assert f"at: '{common.today()}'" in (d / "item.yaml").read_text(encoding="utf-8")
     assert "spec approved" in capsys.readouterr().out
+
+
+def test_approve_delegated_records_flag_and_suffix(project, capsys):
+    d = start_with_spec(project)
+    assert run("approve", "F-001", "spec", "--delegated", "  Jane Doe ", "--yes") == 0
+    item = load_item(d / "item.yaml")
+    assert item["status"] == "spec-approved"
+    assert item["approvals"]["spec"] == {
+        "by": "Jane Doe (delegated to agent)",
+        "at": common.today(),
+        "delegated": True,
+    }
+    assert "Jane Doe (delegated to agent)" in capsys.readouterr().out
+    assert check_project(project, branch=None) == []  # verify accepts what the CLI wrote
+
+
+@pytest.mark.parametrize("name", ["", "   "])
+def test_approve_delegated_empty_name_refused(project, name):
+    d = start_with_spec(project)
+    before = (d / "item.yaml").read_bytes()
+    with pytest.raises(FactoryError, match="--delegated needs the name"):
+        run("approve", "F-001", "spec", "--delegated", name, "--yes")
+    assert (d / "item.yaml").read_bytes() == before
+
+
+def test_approve_without_delegated_has_no_flag(project):
+    d = start_with_spec(project)
+    run("approve", "F-001", "spec", "--yes")
+    assert "delegated" not in load_item(d / "item.yaml")["approvals"]["spec"]
+
+
+def test_reapprove_delegated_refreshes_ledger(project):
+    d = start_with_spec(project)
+    run("approve", "F-001", "spec", "--yes")
+    (d / "plan.md").write_text("A plan\n", encoding="utf-8")
+    run("approve", "F-001", "plan", "--yes")
+    (d / "spec.md").write_text("Amended spec\n", encoding="utf-8")
+    assert run("approve", "F-001", "spec", "--delegated", "Jane Doe", "--yes") == 0
+    item = load_item(d / "item.yaml")
+    assert item["status"] == "plan-approved"
+    assert item["approvals"]["spec"]["by"] == "Jane Doe (delegated to agent)"
+    assert item["approvals"]["spec"]["delegated"] is True
+
+
+def test_status_marks_delegated_approvals(project, capsys):
+    d = start_with_spec(project)
+    run("approve", "F-001", "spec", "--yes")
+    capsys.readouterr()
+    run("status")
+    assert "(delegated)" not in capsys.readouterr().out  # ordinary approval: no marker
+
+    run("approve", "F-001", "spec", "--delegated", "Jane Doe", "--yes")
+    capsys.readouterr()
+    run("status")
+    assert "spec-approved (delegated)" in capsys.readouterr().out
+
+    item = load_item(d / "item.yaml")  # the older hand-written form is recognised too
+    item["approvals"]["spec"] = {"by": "Jane Doe (delegated to agent)", "at": common.today()}
+    work.write_item(d, item)
+    capsys.readouterr()
+    run("status")
+    assert "(delegated)" in capsys.readouterr().out
 
 
 def test_approve_plan_after_spec(project):
