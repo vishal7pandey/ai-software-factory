@@ -514,6 +514,20 @@ def test_exactly_the_limit_leaves_nothing_behind_and_does_not_flood():
     assert len(report.created) == 10 and report.unfiled == {"low": 1}
 
 
+def test_first_sweep_files_only_critical_and_high_even_below_the_cap():
+    alerts = {
+        "code-scanning": [cs(1, "critical"), cs(2, "high"), cs(3, "medium"), cs(4, "low")],
+        "dependabot": [dep(5, "medium")],
+    }
+    gh, jira = FakeGh(alerts), FakeJira()
+    first = sweep(gh, jira)
+    assert [i.priority for i in first.created] == ["critical", "high"]
+    assert first.unfiled == {"medium": 2, "low": 1}
+
+    # once issues exist it is no longer a first sweep: the lower severities are filed next
+    assert [i.priority for i in sweep(gh, jira).created] == ["medium", "medium", "low"]
+
+
 def test_code_scanning_severity_falls_back_to_rule_severity():
     alert = cs(1, level=None)
     alert["rule"]["security_severity_level"] = None
