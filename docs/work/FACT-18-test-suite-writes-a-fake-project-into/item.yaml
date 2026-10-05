@@ -2,7 +2,7 @@ id: FACT-18
 type: bug
 title: Test suite writes a fake project into the real registry
 slug: test-suite-writes-a-fake-project-into
-status: in-review
+status: merged
 risk: low
 jira: FACT-18
 branch: fix/fact-18-test-suite-writes-a-fake-project-into

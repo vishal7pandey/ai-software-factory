@@ -2,7 +2,7 @@ id: FACT-12
 type: feature
 title: Project-aware adoption
 slug: project-aware-adoption
-status: in-review
+status: merged
 risk: medium
 jira: FACT-12
 branch: feature/fact-12-project-aware-adoption

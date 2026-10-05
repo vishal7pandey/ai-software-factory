@@ -1,0 +1,17 @@
+id: FACT-20
+type: feature
+title: Record merged status in the PR's last commit
+slug: record-merged-status-in-the-pr-s-last
+status: merged
+risk: low
+jira: FACT-20
+branch: feature/fact-20-record-merged-status-in-the-pr-s-last
+created: '2026-10-05'
+approvals:
+  spec:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-05'
+  plan:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-05'
+pr: https://github.com/vishal7pandey/ai-software-factory/pull/9

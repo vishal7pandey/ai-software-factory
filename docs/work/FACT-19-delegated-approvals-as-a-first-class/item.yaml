@@ -2,7 +2,7 @@ id: FACT-19
 type: feature
 title: Delegated approvals as a first-class form
 slug: delegated-approvals-as-a-first-class
-status: in-review
+status: merged
 risk: medium
 jira: FACT-19
 branch: feature/fact-19-delegated-approvals-as-a-first-class

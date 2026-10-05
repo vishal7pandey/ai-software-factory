@@ -192,6 +192,19 @@ def report_problems(root: Path, item: dict) -> list[str]:
 # --- next-step table ---------------------------------------------------------------------------
 
 
+def environments_configured(config: dict) -> bool:
+    """True when `.factory/factory.yaml › environments` names at least one environment (FACT-20)."""
+    envs = config.get("environments")
+    return isinstance(envs, dict) and any(v is not None for v in envs.values())
+
+
+def is_closed(item: dict, config: dict) -> bool:
+    """Nothing is left to do: `done`, or `merged` in a project with no environment to release to."""
+    return item["status"] == "done" or (
+        item["status"] == "merged" and not environments_configured(config)
+    )
+
+
 def next_step(item: dict, config: dict) -> tuple[list[str], str | None]:
     """(skills, human action or None) for the item's current status."""
     iid, status = item["id"], item["status"]
@@ -207,7 +220,12 @@ def next_step(item: dict, config: dict) -> tuple[list[str], str | None]:
     if status == "implementing":
         return ["factory-implement"], None
     if status == "in-review":
-        return ["factory-review"], f"merge the PR, then factory advance {iid} merged"
+        return (
+            ["factory-review"],
+            f"merge the PR (last commit on its branch: factory advance {iid} merged)",
+        )
+    if status == "merged" and not environments_configured(config):
+        return [], None  # nothing to release to: merged is the end of the line
     if status in ("merged", "released"):
         return ["factory-release"], None
     return [], None
@@ -234,7 +252,10 @@ def build_prompt(item: dict, item_dir: Path, config: dict) -> tuple[str, str | N
 def print_handoff(item: dict, item_dir: Path, config: dict) -> str:
     prompt, human = build_prompt(item, item_dir, config)
     if not prompt:
-        print(f"Nothing to do: {item['id']} is done.")
+        if item["status"] == "merged":
+            print(f"Nothing to do: {item['id']} is merged and no environment is configured.")
+        else:
+            print(f"Nothing to do: {item['id']} is done.")
         return ""
     print(prompt)
     if human:
@@ -294,10 +315,13 @@ def collect_status(root: Path, show_all: bool) -> list[tuple[str, str, str, str,
         if problems:
             rows.append((dir_id(d.name) or d.name, "?", "INVALID", "-", problems[0]))
             continue
-        if item["status"] == "done" and not show_all:
+        closed = is_closed(item, config)
+        if closed and not show_all:
             continue
-        skills, human = next_step(item, config) if item["status"] != "done" else ([], None)
+        skills, human = next_step(item, config) if not closed else ([], None)
         nxt = " + ".join(skills) or "-"
+        if closed and item["status"] == "merged":
+            nxt = "complete (no environments to release to)"
         if human:
             nxt += f" | human: {human}"
         status = item["status"]

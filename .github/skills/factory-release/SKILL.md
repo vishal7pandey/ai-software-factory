@@ -7,7 +7,8 @@ description: Use when a work item is at status merged and its change must be rol
 
 ## When to use
 
-- `item.yaml` status is `merged` (PR merged to main). You take it to `released`, then `done`.
+- `item.yaml` status is `merged` (PR merged to main; the PR's last commit recorded the status before the merge). You take it to `released`, then `done`, recording that after the release by a docs-only PR (a status commit straight to `main` is not allowed).
+- Nothing to release to? When `.factory/factory.yaml › environments` has no configured environment (all `null` or absent), `merged` is the end of the line: do nothing here, `factory status` already treats the item as complete.
 - Also for projects with no deployment (library, docs): release means tag/publish per the project's convention; say so explicitly in notes.md and treat that as the single "environment".
 - Not for: deploying unmerged branches, hotfix incident mitigation (factory-diagnose handles mitigation decisions), or approving production by yourself.
 

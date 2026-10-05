@@ -40,8 +40,8 @@ description: Use when starting or resuming ANY engineering task in a repo that h
    | `spec-approved` | `factory-plan` | Human approves plan (unless waived, below) |
    | `plan-approved` | `factory-test` to write `test-plan.md`, then set `status: implementing` | You |
    | `implementing` | `factory-implement` | You, to `in-review` |
-   | `in-review` | `factory-review`; fixes loop back to `factory-implement` | Human merges |
-   | `merged` | `factory-release` | You, to `released` then `done` |
+   | `in-review` | `factory-review`; fixes loop back to `factory-implement` | You, to `merged` as the last commit on the branch once review is done and CI is green; human merges |
+   | `merged` | `factory-release` (nothing to do when no environment is configured) | You, to `released` then `done` |
    | `released` | `factory-release` (verification, record, close Jira) | You, to `done` |
 
    Edit `item.yaml` `status:` by hand (or `factory advance <id> <status>`). Statuses only move forward, in this order: draft → spec-approved → plan-approved → implementing → in-review → merged → released → done.

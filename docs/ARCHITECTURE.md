@@ -129,6 +129,13 @@ pr: null                 # PR URL once opened
 * **Who moves what.** `implementing` is set by the agent (`advance` or by hand) once `test-plan.md`
   is written. With the plan approval waived (autonomy rule below) the agent moves
   `spec-approved → plan-approved` itself via `advance`; otherwise only `approve plan` can.
+* **Recording `merged` (FACT-20).** A status change after the merge would need another PR on a protected
+  branch, so finished items would sit at `in-review` forever. Instead the **last commit on the PR branch** sets
+  `status: merged` (`advance <id> merged`), after review is done and CI is green; the merge is the next event. If the PR is
+  closed unmerged, revert that commit. In a project with no environment configured (`factory.yaml › environments` all
+  null or absent) `merged` is the end of the line: `status` omits such items by default, lists them with `--all` as
+  complete, and `next` says there is nothing to do. With an environment configured, `merged` routes to `factory-release`,
+  and `released`/`done` are recorded after the release by a docs-only PR (exempt from rule 3's status check).
 * **Amending after approval (graph rule).** If new information changes an approved `spec.md` or
   `plan.md`, the agent amends it, records why in `notes.md`, and asks the human to re-run
   `approve <id> spec|plan`. Re-approval is allowed at any status up to `in-review`; it refreshes
@@ -234,7 +241,8 @@ factory feature start "Add Google login" --jira PF-12     → docs/work/PF-12-ad
   agent + factory-test        → test-plan.md   (AC → tests)       factory advance PF-12 implementing
   agent + factory-implement   → code + tests, small commits, PR   factory advance PF-12 in-review
   agent + factory-review      → independent pass against spec; fixes loop
-  CI: project ci.yml + factory-verify.yml ;  human merges         factory advance PF-12 merged
+  last commit on the branch                                       factory advance PF-12 merged
+  CI: project ci.yml + factory-verify.yml ;  human merges
   agent + factory-release     → deploy through environments, smoke, record, close Jira
 ```
 
