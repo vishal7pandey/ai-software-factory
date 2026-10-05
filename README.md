@@ -17,8 +17,8 @@ environments where only git and a coding agent are available.
 ```bash
 uv sync
 uv run factory doctor                        # are my tools ready?
-uv run factory adopt ../my-project --dry-run # see what would be added
-uv run factory adopt ../my-project
+uv run factory adopt ../my-project --dry-run # findings + what would be added (runs no project command)
+uv run factory adopt ../my-project           # also runs the generated CI's commands locally; --no-check skips
 cd ../my-project
 uv run --project ../ai-software-factory factory feature start "Add Google login" --jira PF-12
 ```

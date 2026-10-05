@@ -146,7 +146,9 @@ pr: null                 # PR URL once opened
    NEEDS CLARIFICATION marker (square-bracket form, see `factory-spec`).
 3. If `--branch` matches `feature/<id>-…` or `fix/<id>-…` the item must exist and be ≥ `implementing`
    (code is not allowed to ride on an unapproved spec). Branches prefixed `chore/`, `docs/`, `deps/`,
-   or `main` are exempt.
+   or `main` are exempt. With `--changed-files-from <file>` (one path per line; CI passes the PR's
+   diff) a branch whose changed files are all under `docs/work/` is also exempt from the status check
+   (the item must still exist); an unreadable list is ignored, so the strict rule applies.
 4. Prints one line per violation: `FAIL <id>: <reason>`; final line `verify: OK` or `verify: N problem(s)`.
 
 ### 3.4 Skill format
@@ -199,8 +201,8 @@ error (`FactoryError`, message to stderr), 2 usage. No command may require netwo
 
 | command | owner module | purpose |
 |---|---|---|
-| `adopt <path> [--stack] [--tracker] [--jira-key] [--autonomy] [--dry-run]` | `commands/install.py` | lay the kit into a project; register it |
-| `sync [path] [--force] [--dry-run]` | `commands/install.py` | refresh managed files; report conflicts/drift |
+| `adopt <path> [--stack] [--tracker] [--jira-key] [--autonomy] [--dry-run] [--no-check]` | `commands/install.py` | lay the kit into a project; register it. Project-aware: prints findings (default branch, existing CI triggers, commands section), inserts a commands TODO above a new AGENTS.md block, points a new CI at the default branch and drops CI steps that fail locally (`--no-check` skips running them; `--dry-run` never does). `adopt_inspect.py` |
+| `sync [path] [--force] [--dry-run] [--check]` | `commands/install.py` | refresh managed files; report conflicts/drift. `--check` writes nothing and exits 1 if a managed file is stale or missing |
 | `new <name> --stack python [--dir]` | `commands/install.py` | copy `templates/<stack>`, `git init`, adopt |
 | `project list\|add\|remove` | `commands/install.py` | registry |
 | `doctor [path]` | `commands/doctor.py` | tools present (git, gh, uv, node, docker, claude); gh auth; for a project: drift/missing kit files |

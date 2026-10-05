@@ -1,0 +1,17 @@
+id: FACT-12
+type: feature
+title: Project-aware adoption
+slug: project-aware-adoption
+status: in-review
+risk: medium
+jira: FACT-12
+branch: feature/fact-12-project-aware-adoption
+created: '2026-10-05'
+approvals:
+  spec:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-05'
+  plan:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-05'
+pr: https://github.com/vishal7pandey/ai-software-factory/pull/5

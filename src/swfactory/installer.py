@@ -14,7 +14,7 @@ from pathlib import Path
 
 import yaml
 
-from swfactory import __version__, common
+from swfactory import __version__, adopt_inspect, common
 from swfactory.common import FactoryError
 
 BEGIN = "<!-- factory:begin -->"
@@ -248,12 +248,52 @@ def _project_dir(path: str | Path) -> Path:
     return p
 
 
-def _install(root: Path, config: dict, existing: dict | None, *, force: bool, dry_run: bool) -> int:
+def _insert_todo(action: Action, todo: str) -> None:
+    """Put the TODO commands section directly above the factory block of a new/appended block."""
+    if action.data is None or BEGIN.encode() not in action.data:
+        return
+    eol = b"\r\n" if b"\r\n" in action.data else b"\n"
+    text = todo.replace("\n", eol.decode()).encode()
+    at = action.data.index(BEGIN.encode())
+    action.data = action.data[:at] + text + action.data[at:]
+    action.detail = (action.detail + " + " if action.detail else "") + "commands TODO section"
+
+
+def _install(
+    root: Path,
+    config: dict,
+    existing: dict | None,
+    *,
+    force: bool,
+    dry_run: bool,
+    inspection: adopt_inspect.Inspection | None = None,
+    check: bool = False,
+    runner: adopt_inspect.Runner | None = None,
+) -> int:
+    """`inspection` (adopt only) adapts what is newly written: the generated CI and a new AGENTS.md
+    block. Existing files are never changed that way, so sync and a second adopt stay no-ops."""
     managed = dict(config["managed"])
-    actions = [
-        _plan_item(item, root, managed, force)
-        for item in collect_items(config["stack"], config["skill_targets"])
-    ]
+    items = collect_items(config["stack"], config["skill_targets"])
+    ci_report = adopt_inspect.CiReport()
+    if inspection is not None:
+        for item in items:
+            if item.dest == adopt_inspect.CI_DEST and not (root / item.dest).exists():
+                item.content, ci_report = adopt_inspect.adapt_ci(
+                    item.content,
+                    inspection.default_branch,
+                    root,
+                    check=check and not dry_run,
+                    runner=runner,
+                )
+                if check and dry_run:
+                    ci_report.notes.append("checks not run (--dry-run runs no project command)")
+    actions = [_plan_item(item, root, managed, force) for item in items]
+    todo_added = False
+    if inspection is not None and not inspection.has_commands_section:
+        for a in actions:
+            if a.dest == "AGENTS.md" and (a.status == "CREATE" or a.detail == "append block"):
+                _insert_todo(a, adopt_inspect.todo_section(inspection.detected_commands))
+                todo_added = True
     for a in actions:
         if a.key is not None and a.digest is not None:
             managed[a.key] = a.digest
@@ -280,6 +320,17 @@ def _install(root: Path, config: dict, existing: dict | None, *, force: bool, dr
         if existing != config:
             common.dump_yaml(config, root / CONFIG_REL)
 
+    if inspection is not None:
+        result = ci_report.lines()
+        if todo_added:
+            n = len(inspection.detected_commands)
+            verb = "would add" if dry_run else "added"
+            result.append(f"AGENTS.md: {verb} a commands TODO section ({n} detected command(s))")
+        if result:
+            print("result:")
+            for line in result:
+                print(f"  {line}")
+
     if not (created or updated or count["CONFLICT"]):
         print("up to date")
         return 0
@@ -297,6 +348,8 @@ def adopt(
     jira_key: str | None = None,
     autonomy: str | None = None,
     dry_run: bool = False,
+    check: bool = True,
+    runner: adopt_inspect.Runner | None = None,
 ) -> int:
     root = _project_dir(path)
     if not common.is_git_repo(root):
@@ -306,7 +359,23 @@ def adopt(
     config = resolve_config(
         existing, root, stack=stack, tracker=tracker, jira_key=jira_key, autonomy=autonomy
     )
-    code = _install(root, config, existing, force=False, dry_run=dry_run)
+    inspection = adopt_inspect.inspect_project(root)
+    print("findings:")
+    print(f"  default branch: {inspection.default_branch or 'unknown'}")
+    for line in inspection.findings:
+        print(f"  {line}")
+    if not inspection.has_commands_section:
+        print("  AGENTS.md: no commands section (a TODO section goes above the factory block)")
+    code = _install(
+        root,
+        config,
+        existing,
+        force=False,
+        dry_run=dry_run,
+        inspection=inspection,
+        check=check,
+        runner=runner,
+    )
     if not dry_run:
         _register_adopted(root, config)
     return code
@@ -321,6 +390,29 @@ def sync(path: str | Path | None = None, *, force: bool = False, dry_run: bool =
     existing = common.load_yaml(cfg_path)
     config = resolve_config(existing, root)
     return _install(root, config, existing, force=force, dry_run=dry_run)
+
+
+def sync_check(path: str | Path | None = None) -> int:
+    """Exit 1 if any managed or block file is missing or differs from the factory source."""
+    root = common.find_project_root(_project_dir(path or "."))
+    cfg_path = root / CONFIG_REL
+    if not cfg_path.is_file():
+        raise FactoryError(f"{root} is not adopted (no {CONFIG_REL}); run `factory adopt` first")
+    config = resolve_config(common.load_yaml(cfg_path), root)
+    managed = dict(config["managed"])
+    stale = []
+    for item in collect_items(config["stack"], config["skill_targets"]):
+        a = _plan_item(item, root, managed, False)
+        if item.mode != "create" and a.status in ("CREATE", "UPDATE", "BLOCK", "CONFLICT"):
+            stale.append(a)
+    for a in stale:
+        what = "MISSING" if a.status == "CREATE" else "STALE"
+        print(f"{what:<8}{a.dest}" + (f"  ({a.detail})" if a.detail else ""))
+    if stale:
+        print(f"{len(stale)} managed file(s) differ from the factory source; run `factory sync`")
+        return 1
+    print("in sync with the factory source")
+    return 0
 
 
 # --- registry (Treaty 3.6) ---------------------------------------------------------------------

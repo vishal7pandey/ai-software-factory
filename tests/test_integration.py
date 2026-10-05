@@ -98,3 +98,11 @@ def test_slugify_cuts_on_word_boundary():
     assert len(slug) <= 40
     assert common.slugify("x" * 60) == "x" * 40  # no hyphen to cut on: hard cut
     assert common.slugify("!!!") == "item"
+
+
+def test_factory_repo_is_in_sync_with_its_kit(capsys):
+    """The factory adopts itself: its managed copies (.factory/, .claude/skills, .github/) must
+    equal their sources. Fix a failure with `uv run factory sync`."""
+    from swfactory import installer
+
+    assert installer.sync_check(common.FACTORY_ROOT) == 0, capsys.readouterr().out

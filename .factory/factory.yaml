@@ -29,7 +29,7 @@ managed:
   .factory/templates/work/spec.bug.md: 3fb67e255b545219614092c973e6d7caa73b493760bf7cf6dfa8931276ea8bdd
   .factory/templates/work/spec.feature.md: f6b256a029fda98ce830d5a5a24b6ce8767aa84bcc2e33496313ea4bca71477a
   .factory/templates/work/test-plan.md: 102ca55a8c89241b36c27024744c46bbe3d4cbe5b0420ef8c2b83649b5a65713
-  .factory/verify.py: fd924d0f332ab53a5f6cfc8e71f3f2b65219b0aacdfb81bedffcd66a66345d3a
+  .factory/verify.py: 6a7dcdd5c6edea4f2a5b7d06d2a49543b19d4fe6ec80eaa8c25f18fb6c5d8134
   .github/skills/factory-diagnose/SKILL.md: 1d92fede43520c4a7fd11459d7b7ac1659fd30601bec7d99084e427a48c64c2b
   .github/skills/factory-implement/SKILL.md: 31bdc4071aa3999054c6423e48647adb93155c39d006bf10a461929973818e0a
   .github/skills/factory-plan/SKILL.md: b29284ca1c6cf32eaf54e70fff339c294abf8be882abb6ef8dd331430d0d220e
@@ -38,5 +38,5 @@ managed:
   .github/skills/factory-spec/SKILL.md: bd18a00c71860132dffcb8a381704af85f54f2f273ed9cbf7f9d99dc3063c96a
   .github/skills/factory-test/SKILL.md: e94329dea50f1ef35827f708929677fec0d33fb9b1b89e80f414e70b7521c9e1
   .github/skills/factory-workflow/SKILL.md: 2e6d93e676774a696e5ae4d4871617926e7618dde01a4c7a0da9549f3f3f04b3
-  .github/workflows/factory-verify.yml: dea66c500bfe2a986b5b6a5c7a209d4b157b5d3e0fb10d6af0a6ffddb85130f6
+  .github/workflows/factory-verify.yml: c8262b3fd47ff858422caab9d17c7e9b83a866532ccef44464bc0b6ed8bb3d59
   AGENTS.md#block: 2a83ac8b424cf8f2179ce93a742e4831bb09c04eae8b1649bd2e02833c538d1f
