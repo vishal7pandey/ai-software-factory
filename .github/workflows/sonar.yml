@@ -1,0 +1,65 @@
+# SonarCloud analysis for a uv-based Python project (factory kit; create-mode: yours to edit).
+# Safe by default: without the SONAR_TOKEN secret (fork PRs, Dependabot, a repo not set up yet) or
+# while sonar-project.properties still has REPLACE_ME values, the guard step skips the scan with a
+# notice and the job stays green. Setup steps: docs/sonarcloud.md in the factory repository.
+# To make a failed quality gate fail this job, add `args: -Dsonar.qualitygate.wait=true` to the scan.
+name: sonar
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  sonar:
+    name: sonarcloud
+    runs-on: ubuntu-latest
+    # Fork PRs get no secrets: do not even start for them.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Check SonarCloud is set up
+        id: guard
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          skip() {
+            echo "::notice title=SonarCloud scan skipped::$1"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+          if [ -z "${SONAR_TOKEN:-}" ]; then
+            skip "The SONAR_TOKEN secret is not available to this run (fork or Dependabot pull request, or not set up yet). Nothing was scanned."
+          fi
+          if [ ! -f sonar-project.properties ]; then
+            skip "sonar-project.properties is missing. Nothing was scanned."
+          fi
+          if grep -Eq '^[[:space:]]*[^#[:space:]].*REPLACE_ME' sonar-project.properties; then
+            skip "sonar-project.properties still has REPLACE_ME values: set the organization and project key in it. Nothing was scanned."
+          fi
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-python@v7
+        if: steps.guard.outputs.enabled == 'true'
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v10.2.0
+        if: steps.guard.outputs.enabled == 'true'
+      - name: Install dependencies
+        if: steps.guard.outputs.enabled == 'true'
+        run: uv sync --all-extras --all-groups
+      - name: Tests with coverage (adapt to your project)
+        if: steps.guard.outputs.enabled == 'true'
+        run: uv run --with pytest-cov python -m pytest -q --cov --cov-report=xml:coverage.xml
+      - name: SonarCloud scan
+        if: steps.guard.outputs.enabled == 'true'
+        uses: SonarSource/sonarqube-scan-action@v8
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL || 'https://sonarcloud.io' }}
