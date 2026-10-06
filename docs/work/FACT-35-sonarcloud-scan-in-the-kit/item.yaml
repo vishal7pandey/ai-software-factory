@@ -2,7 +2,7 @@ id: FACT-35
 type: feature
 title: SonarCloud scan in the kit
 slug: sonarcloud-scan-in-the-kit
-status: in-review
+status: merged
 risk: medium
 jira: FACT-35
 branch: feature/fact-35-sonarcloud-scan-in-the-kit
@@ -16,4 +16,4 @@ approvals:
     by: Vishal Pandey (delegated to agent)
     at: '2026-10-05'
     delegated: true
-pr: null
+pr: https://github.com/vishal7pandey/ai-software-factory/pull/14
