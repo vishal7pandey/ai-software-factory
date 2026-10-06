@@ -184,7 +184,8 @@ never inline scripts) and the explicit-staging rule (never `git add -A`).
 
 V1 skills: `factory-workflow` (router), `factory-spec`, `factory-plan`, `factory-implement`,
 `factory-test`, `factory-review`, `factory-diagnose`, `factory-release`, and `factory-findings` (scanner
-alerts to tracked, fixed, scanner-confirmed closed Jira Bugs; policy `findings.md`).
+alerts to tracked, fixed, scanner-confirmed closed Jira Bugs; same-package and same-rule alerts share one
+issue, closed only when every alert it carries is fixed; policy `findings.md`).
 
 ### 3.5 `factory.yaml` (in the adopted project)
 

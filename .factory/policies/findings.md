@@ -6,15 +6,42 @@ results), Dependabot, secret scanning, and SonarQube where a project exists. The
 
 ## Closure rule
 
-* A finding is tracked as one Jira Bug (labels in the skill). That issue goes to Done **only** when the scanner
-  confirms the finding is gone: the alert, re-queried, has `state` = `fixed` (code scanning, Dependabot), or the
-  SonarQube issue is closed by a new analysis. A merged PR, a green build or "the code looks fixed" is not
-  confirmation: the scanner has to say it.
+* A finding (one alert) is tracked on one Jira Bug (labels in the skill); a Bug may carry several alerts when they
+  are grouped (see Grouping). That issue goes to Done **only** when the scanner confirms every finding it carries
+  is gone: each alert, re-queried, has `state` = `fixed` (code scanning, Dependabot), or the SonarQube issue is
+  closed by a new analysis. A merged PR, a green build or "the code looks fixed" is not confirmation: the scanner
+  has to say it.
+* A grouped issue goes to Done only when all of its alerts are settled: every alert re-queried as `fixed`
+  (secrets: revoked), or dismissed with a human approval recorded on the issue. One alert still `open`, or
+  `dismissed` without a recorded approval, anywhere in the group blocks Done.
 * A secret-scanning alert has no `fixed` state. It is closed only when a human confirms the secret was revoked
   (rotated) and the alert is `resolved` with resolution `revoked`. Removing it from the code does not close it.
 * An alert that is still `open` never allows Done, whatever else is true. Cite the re-queried state in the
   closing Jira comment (alert URL, state, date).
-* A closed finding whose alert is `open` again is reopened (the same issue), never filed a second time.
+* A closed finding whose alert is `open` again is reopened (the same issue, the one that carries its label),
+  never filed a second time.
+
+## Grouping
+
+Grouping is the default: one Jira issue is the unit of work, and one upgrade or one fix pattern is one unit.
+
+* One issue may carry several `finding-<source>-<id>` labels when the alerts are (a) the same Dependabot package in
+  the same manifest file, or (b) the same code-scanning rule in the same file or the same module. Same module means
+  the same directory: the part of the file path before the last `/` (the repo root is one directory, `./`), not
+  subdirectories. A file is in its own directory, so one rule covers same file and same module.
+* Secret-scanning alerts and SonarQube issues are never grouped: one issue per alert. A code-scanning alert without a
+  file path is not grouped either.
+* Every alert keeps its own label and its own re-query. Grouping changes how many issues there are, never the closure
+  rule above.
+* A group is found again by the issue summary: Dependabot `[<package>] <manifest path>`, code scanning
+  `[<rule id>] <directory>/`. An open group is an issue labelled `finding`, not Done, whose summary equals that text.
+* A new alert (no label in Jira yet) that fits an open group adds its label and a comment to that issue; it does not
+  create an issue. A new alert that fits only a Done group is filed as a new issue; a Done group is not reopened for
+  it. An alert that already has a label and is `open` again reopens the issue that carries it (closure rule).
+* The group's priority is the highest severity among its alerts.
+* Per-alert issues remain available when the human asks: file one issue per alert, with the per-alert summary (code
+  scanning `[<rule id>] <path>:<line>`, Dependabot `[<package>] <manifest path> (alert <id>)`). They are never join
+  targets.
 
 ## Dismissal gate
 
@@ -38,11 +65,13 @@ results), Dependabot, secret scanning, and SonarQube where a project exists. The
 ## Batch limits
 
 * A first sweep (no issue with the label `finding` exists yet) files only `critical` and `high` findings, and at
-  most 10 issues in one run. Every later run also files at most 10 new issues.
+  most 10 issues in one run. Every later run also files at most 10 new issues. The cap counts issues, not alerts:
+  alerts that join a group, in the same run or an open one, do not use it up.
 * Order: secret-scanning alerts first, then by severity: `critical`, `high`, `medium`, `low` (code scanning:
   `rule.security_severity_level`, falling back to `rule.severity` where `error` counts as high, `warning` as
   medium and `note` as low; Dependabot: `security_advisory.severity`).
-* The rest is reported to the human as counts per severity, never as an issue per alert. The human decides what
+* The rest is reported to the human as counts of alerts per severity, never as an issue per alert. Every report
+  gives the numbers in alerts and in issues (alerts found, alerts filed, issues created). The human decides what
   to file next. Never file the whole backlog "to be safe".
 * Secret values, tokens and keys never go into Jira, a PR or a prompt (`security.md`).
 

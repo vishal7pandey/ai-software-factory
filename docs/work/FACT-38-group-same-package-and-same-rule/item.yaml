@@ -1,0 +1,19 @@
+id: FACT-38
+type: feature
+title: Group same-package and same-rule findings into one issue
+slug: group-same-package-and-same-rule
+status: merged
+risk: medium
+jira: FACT-38
+branch: feature/fact-38-group-same-package-and-same-rule
+created: '2026-10-05'
+approvals:
+  spec:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-05'
+    delegated: true
+  plan:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-05'
+    delegated: true
+pr: https://github.com/vishal7pandey/ai-software-factory/pull/13

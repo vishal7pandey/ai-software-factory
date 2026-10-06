@@ -91,8 +91,10 @@ class Finding:
     api: str  # code-scanning | dependabot | secret-scanning
     number: int
     severity: str
-    summary: str
+    summary: str  # the per-alert summary, used when the human asks for one issue per alert
     url: str
+    group: str | None = None  # the group summary; None when the alert is never grouped
+    where: str = ""  # location text for a join comment
 
     @property
     def source(self) -> str:
@@ -107,21 +109,35 @@ class Finding:
         return label(self.source, self.number)
 
 
+def directory(path: str) -> str:
+    """The module of a file: its directory, the part before the last `/`; the repo root is `./`."""
+    return path.rsplit("/", 1)[0] + "/" if "/" in path else "./"
+
+
 def normalise(api: str, alert: dict) -> Finding:
+    group = None
     if api == "code-scanning":
         rule = alert["rule"]
         sev = rule.get("security_severity_level") or FALLBACK_SEVERITY[rule["severity"]]
         loc = alert["most_recent_instance"]["location"]
-        summary = f"[{rule['id']}] {loc['path']}:{loc['start_line']}"
+        path = loc.get("path")
+        if path:
+            summary = f"[{rule['id']}] {path}:{loc['start_line']}"
+            where = f"{path}:{loc['start_line']}"
+            group = f"[{rule['id']}] {directory(path)}"
+        else:  # no file path: never grouped
+            summary = where = f"[{rule['id']}] alert {alert['number']}"
     elif api == "dependabot":
         sev = alert["security_advisory"]["severity"]
-        summary = (
-            f"[{alert['dependency']['package']['name']}] {alert['dependency']['manifest_path']}"
-        )
-    else:
+        pkg, manifest = alert["dependency"]["package"]["name"], alert["dependency"]["manifest_path"]
+        group = f"[{pkg}] {manifest}"
+        summary = f"{group} (alert {alert['number']})"
+        where = manifest
+    else:  # secret scanning: one issue per alert, never grouped
         sev = "critical"
         summary = f"[secret] {alert['secret_type_display_name']}"  # never the value
-    return Finding(api, alert["number"], sev, summary, alert["html_url"])
+        where = ""
+    return Finding(api, alert["number"], sev, summary, alert["html_url"], group, where)
 
 
 class FakeGh:
@@ -161,16 +177,34 @@ class Issue:
     status: str = "To Do"
     priority: str = ""
     comments: list[str] = field(default_factory=list)
+    dismissed: dict[str, str] = field(default_factory=dict)  # alert label -> approver
+
+
+ALERT_LABEL = re.compile(r"finding-(codeql|dependabot|secret|sonar)-(\w+)")
+
+
+def alert_labels(issue: Issue) -> list[str]:
+    """Every alert the issue carries; `finding` itself is the marker, not an alert."""
+    return [lbl for lbl in issue.labels if ALERT_LABEL.fullmatch(lbl)]
 
 
 class FakeJira:
-    """Search by label (any status), create, comment, transition."""
+    """Search by label (any status) or open group by summary, create, comment, transition."""
 
     def __init__(self):
         self.issues: list[Issue] = []
 
     def search_label(self, lbl: str) -> list[Issue]:
         return [i for i in self.issues if lbl in i.labels]
+
+    def search_open_group(self, summary: str) -> list[Issue]:
+        """Open (not Done) `finding` issues whose summary equals the group summary exactly: Jira's
+        summary search is fuzzy, so the skill compares the returned summaries itself."""
+        return [
+            i
+            for i in self.issues
+            if "finding" in i.labels and i.status != "Done" and i.summary == summary
+        ]
 
     def create(self, labels: list[str], summary: str, url: str, priority: str) -> Issue:
         issue = Issue(f"FIND-{len(self.issues) + 1}", list(labels), summary, priority=priority)
@@ -181,14 +215,22 @@ class FakeJira:
 
 @dataclass
 class Report:
-    created: list[Issue] = field(default_factory=list)
+    created: list[Issue] = field(default_factory=list)  # new issues
+    joined: list[Issue] = field(default_factory=list)  # one entry per alert added to an open group
     already_tracked: int = 0
     reopened: list[Issue] = field(default_factory=list)
-    unfiled: dict[str, int] = field(default_factory=dict)
+    unfiled: dict[str, int] = field(default_factory=dict)  # alerts left unfiled, by severity
+    alerts_found: int = 0
+    alerts_filed: int = 0  # alerts that now sit on a new issue or on a joined group
+
+    @property
+    def issues_created(self) -> int:
+        return len(self.created)
 
 
-def sweep(gh: FakeGh, jira: FakeJira) -> Report:
-    """Steps 1 to 3 of the skill: pull, rank, batch limits, search Jira by label, create once."""
+def sweep(gh: FakeGh, jira: FakeJira, grouping: bool = True) -> Report:
+    """Steps 1 to 3 of the skill: pull, rank, batch limits, search Jira by label, join an open group
+    or create. `grouping=False` is the per-alert mode the human can ask for."""
     findings = [
         normalise(api, a)
         for api, endpoint in skill_list_endpoints().items()
@@ -196,7 +238,7 @@ def sweep(gh: FakeGh, jira: FakeJira) -> Report:
     ]
     findings.sort(key=lambda f: (f.rank, f.number))
     first_sweep = not jira.search_label("finding")
-    report = Report()
+    report = Report(alerts_found=len(findings))
     for f in findings:
         existing = jira.search_label(f.label)
         if existing:
@@ -210,10 +252,29 @@ def sweep(gh: FakeGh, jira: FakeJira) -> Report:
             continue
         too_low = first_sweep and f.rank not in FIRST_SWEEP_RANKS and f.api != "secret-scanning"
         priority = "secret" if f.api == "secret-scanning" else f.severity
-        if too_low or len(report.created) >= BATCH_LIMIT:
+        if too_low:
             report.unfiled[priority] = report.unfiled.get(priority, 0) + 1
             continue
-        report.created.append(jira.create(["finding", f.label], f.summary, f.url, priority))
+        groups = jira.search_open_group(f.group) if grouping and f.group else []
+        if groups:  # fits an open group: label plus comment, no new issue, no use of the cap
+            issue = groups[0]
+            issue.labels.append(f.label)
+            note = f"alert {f.url} added to this group ({f.where}, {priority})"
+            if issue.status != "To Do":
+                note += f"; the issue is {issue.status}, the fix in flight may not cover it"
+            issue.comments.append(note)
+            if RANK[priority] < RANK.get(issue.priority, 99):
+                issue.priority = priority
+                issue.comments.append(f"priority raised to {priority}")
+            report.joined.append(issue)
+            report.alerts_filed += 1
+            continue
+        if len(report.created) >= BATCH_LIMIT:  # the cap counts issues, not alerts
+            report.unfiled[priority] = report.unfiled.get(priority, 0) + 1
+            continue
+        summary = f.group if grouping and f.group else f.summary
+        report.created.append(jira.create(["finding", f.label], summary, f.url, priority))
+        report.alerts_filed += 1
     return report
 
 
@@ -229,14 +290,32 @@ def confirmed(source: str, alert: dict) -> bool:
     return alert["state"] == "fixed"
 
 
-def close(gh: FakeGh, issue: Issue, source: str, number: int) -> bool:
-    """Step 5: re-query, then Done only on the scanner's word, citing the state."""
-    alert = requery(gh, source, number)
-    if not confirmed(source, alert):
-        issue.comments.append(f"not closed: alert state is {alert['state']}")
+def check_alerts(gh: FakeGh, issue: Issue) -> tuple[list[str], list[str]]:
+    """Step 5: re-query every alert the issue carries. Returns (settled, not settled), as text
+    for the Jira comment. An alert is settled when the scanner says `fixed` (secret: revoked),
+    or when it was dismissed with a recorded human approval."""
+    settled, blocking = [], []
+    for lbl in alert_labels(issue):
+        if lbl in issue.dismissed:
+            settled.append(f"{lbl} dismissed, approved by {issue.dismissed[lbl]}")
+            continue
+        m = ALERT_LABEL.fullmatch(lbl)
+        alert = requery(gh, m.group(1), int(m.group(2)))
+        if confirmed(m.group(1), alert):
+            settled.append(f"{alert['html_url']} state {alert['state']}")
+        else:
+            blocking.append(f"{alert['html_url']} state is {alert['state']}")
+    return settled, blocking
+
+
+def close(gh: FakeGh, issue: Issue) -> bool:
+    """Done only when ALL the issue's alerts are settled on the scanner's word, citing each."""
+    settled, blocking = check_alerts(gh, issue)
+    if blocking:
+        issue.comments.append("not closed: " + "; ".join(blocking))
         return False
     issue.status = "Done"
-    issue.comments.append(f"closed: alert {alert['html_url']} state {alert['state']}")
+    issue.comments.append("closed: " + "; ".join(settled))
     return True
 
 
@@ -256,30 +335,41 @@ def dismiss(gh: FakeGh, issue: Issue, api: str, number: int, reason: str, approv
     else:
         fields = {"state": "dismissed", "dismissed_reason": value}
     gh.patch(api, number, **fields)
+    issue.dismissed[label(SOURCES[api], number)] = approved_by
     issue.comments.append(f"dismissed: {reason}, approved by {approved_by}")
-    issue.status = "Done"
+    _, blocking = check_alerts(gh, issue)
+    if not blocking:  # Done only when every other alert of the group is settled too
+        issue.status = "Done"
 
 
 # --- fake alert data ---------------------------------------------------------------------
 
 
-def cs(number, level="high", state="open", path="src/app.py", line=10):
+def cs(number, level="high", state="open", path=None, line=10, rule=None):
+    """Defaults give every alert its own rule and directory, so alerts do not group unless a test
+    says so with explicit `rule=` and `path=`."""
+    path = path if path is not None else f"src/mod{number}/app.py"
     return {
         "number": number,
         "state": state,
         "html_url": f"https://example.test/cs/{number}",
-        "rule": {"id": "py/sql-injection", "security_severity_level": level, "severity": "error"},
-        "most_recent_instance": {"location": {"path": path, "start_line": line}},
+        "rule": {
+            "id": rule or f"py/rule-{number}",
+            "security_severity_level": level,
+            "severity": "error",
+        },
+        "most_recent_instance": {"location": {"path": path or None, "start_line": line}},
     }
 
 
-def dep(number, severity="high", state="open"):
+def dep(number, severity="high", state="open", package=None, manifest="uv.lock"):
+    """Defaults give every alert its own package; pass `package=` and `manifest=` to group."""
     return {
         "number": number,
         "state": state,
         "html_url": f"https://example.test/dep/{number}",
         "security_advisory": {"severity": severity},
-        "dependency": {"package": {"name": "libx"}, "manifest_path": "uv.lock"},
+        "dependency": {"package": {"name": package or f"pkg{number}"}, "manifest_path": manifest},
     }
 
 
@@ -323,6 +413,7 @@ def test_workflow_routes_findings_and_both_skills_state_the_closure_rule():
         assert "`finding`" in text
         assert "Done" in text and "`fixed`" in text
         assert "open alert never allows done" in text.lower()
+        assert "every alert" in text  # a grouped issue closes only when all its alerts are `fixed`
     assert "findings.md" in read(ROOT / "policies" / "autonomy.md")
     assert "`findings`" in read(ROOT / "kit" / "AGENTS.block.md")
 
@@ -381,7 +472,65 @@ def test_policy_names_closure_rule_reasons_and_enable_commands():
         assert cmd in POLICY, cmd
 
 
-# --- AC2: the scripted walkthrough -------------------------------------------------------
+GROUP_SUMMARY_DEPENDABOT = "[<package>] <manifest path>"
+GROUP_SUMMARY_CODE = "[<rule id>] <directory>/"
+
+
+def flat(text: str) -> str:
+    return " ".join(text.split()).lower()  # wrapped lines, any case
+
+
+def test_grouping_rule_is_stated_in_skill_and_policy():
+    for name, text in (("skill", SKILL), ("policy", POLICY)):
+        t = flat(text)
+        assert "grouping is the default" in t, name
+        assert "same dependabot package in the same manifest" in t, name
+        assert "same code-scanning rule in the same file or the same module" in t, name
+        assert "same module means the same directory" in t, name  # the precise definition
+        assert "not subdirectories" in t, name
+        assert "per-alert issues remain available when the human asks" in t, name
+        assert "every alert keeps its own" in t, name
+        assert "only when all" in t, name  # Done only when ALL alerts re-query as fixed
+        assert GROUP_SUMMARY_DEPENDABOT.lower() in t, name  # how a group is found again
+        assert GROUP_SUMMARY_CODE.lower() in t, name
+    t = flat(SKILL)
+    assert "secret-scanning" in t and "never grouped" in t  # secrets and Sonar stay per alert
+    assert "adds its label and a comment" in t  # a new alert joins an open group
+    assert "only a done group" in t  # and a Done group is not reopened for it
+    flat_policy = flat(POLICY)
+    assert "the cap counts issues, not alerts" in flat_policy
+    assert "alerts and in issues" in flat_policy and "alerts and in issues" in t
+    # the helper builds the summaries the text names
+    d = normalise("dependabot", dep(1, package="p", manifest="a/uv.lock"))
+    assert d.group == "[p] a/uv.lock"
+    c = normalise("code-scanning", cs(1, rule="r", path="src/x/f.py"))
+    assert c.group == "[r] src/x/"
+
+
+def test_old_one_issue_per_finding_rule_is_gone_everywhere():
+    banned = (
+        "do not merge several alerts into one issue",
+        "one issue per finding",
+        "one jira bug each",
+        "one jira bug per finding",
+    )
+    roots = [ROOT / "skills", ROOT / "policies", ROOT / "kit", ROOT / "docs", ROOT / "README.md"]
+    scanned = 0
+    for top in roots:
+        files = [top] if top.is_file() else sorted(p for p in top.rglob("*") if p.is_file())
+        for path in files:
+            if "work" in path.relative_to(ROOT).parts[:2] and top.name == "docs":
+                continue  # work items record history
+            if path.suffix not in (".md", ".yaml", ".yml"):
+                continue
+            scanned += 1
+            text = flat(read(path))
+            for phrase in banned:
+                assert phrase not in text, f"{path.relative_to(ROOT)}: {phrase!r}"
+    assert scanned > 10
+
+
+# --- AC2 to AC5: the scripted walkthrough ------------------------------------------------
 
 
 def test_two_sweeps_create_one_issue_per_finding():
@@ -412,24 +561,24 @@ def test_open_alert_never_allows_done():
     # open: refused, whatever else is true
     issue = by["finding-codeql-123"]
     issue.status = "In Review"  # the fix PR is merged and reviewed; the scanner has not agreed
-    assert close(gh, issue, "codeql", 123) is False
+    assert close(gh, issue) is False
     assert issue.status == "In Review" and "state is open" in issue.comments[-1]
 
     # a revoked-looking secret that is only dismissed as won't fix is not "revoked"
     alerts["secret-scanning"][0].update(state="resolved", resolution="wont_fix")
-    assert close(gh, by["finding-secret-2"], "secret", 2) is False
+    assert close(gh, by["finding-secret-2"]) is False
     assert by["finding-secret-2"].status == "To Do"
 
     # fixed: Done, citing the state
     alerts["code-scanning"][0]["state"] = "fixed"
-    assert close(gh, issue, "codeql", 123) is True
+    assert close(gh, issue) is True
     assert issue.status == "Done" and "state fixed" in issue.comments[-1]
     alerts["secret-scanning"][0].update(resolution="revoked")
-    assert close(gh, by["finding-secret-2"], "secret", 2) is True
+    assert close(gh, by["finding-secret-2"]) is True
 
     # a dismissed alert is not `fixed` either: closing needs the dismissal path
     alerts["dependabot"][0]["state"] = "dismissed"
-    assert close(gh, by["finding-dependabot-7"], "dependabot", 7) is False
+    assert close(gh, by["finding-dependabot-7"]) is False
 
 
 def test_dismissal_needs_explicit_approval_and_allowed_reason():
@@ -542,12 +691,283 @@ def test_done_issue_with_reopened_alert_is_reopened_not_duplicated():
     sweep(gh, jira)
     issue = next(i for i in jira.issues if i.labels[1] == "finding-codeql-123")
     alerts["code-scanning"][0]["state"] = "fixed"
-    assert close(gh, issue, "codeql", 123) and issue.status == "Done"
+    assert close(gh, issue) and issue.status == "Done"
 
     alerts["code-scanning"][0]["state"] = "open"  # the same alert number appears open again
     report = sweep(gh, jira)
     assert report.reopened == [issue] and issue.status == "To Do"
     assert report.created == [] and len(jira.issues) == 3
+
+
+# --- FACT-38: grouping -------------------------------------------------------------------
+
+
+def alert_label_set(issue: Issue) -> set[str]:
+    return set(alert_labels(issue))
+
+
+def test_same_package_and_manifest_dependabot_alerts_share_one_issue():
+    alerts = {
+        "dependabot": [
+            dep(1, "high", package="libx", manifest="web/package-lock.json"),
+            dep(2, "critical", package="libx", manifest="web/package-lock.json"),
+            dep(3, "high", package="libx", manifest="web/package-lock.json"),
+            dep(4, package="libx", manifest="api/uv.lock"),  # same package, other manifest
+            dep(
+                5, package="liby", manifest="web/package-lock.json"
+            ),  # other package, same manifest
+        ]
+    }
+    gh, jira = FakeGh(alerts), FakeJira()
+    report = sweep(gh, jira)
+    assert len(jira.issues) == 3 and report.issues_created == 3
+    group = next(i for i in jira.issues if i.summary == "[libx] web/package-lock.json")
+    assert alert_label_set(group) == {f"finding-dependabot-{n}" for n in (1, 2, 3)}
+    assert group.labels.count("finding") == 1 and group.priority == "critical"
+    assert report.alerts_found == 5 and report.alerts_filed == 5
+    assert len(report.joined) == 2  # two alerts joined the issue the first one opened
+    others = [i for i in jira.issues if i is not group]
+    assert len(others) == 2 and all(len(alert_label_set(i)) == 1 for i in others)
+
+
+def test_same_rule_in_the_same_directory_shares_one_issue():
+    alerts = {
+        "code-scanning": [
+            cs(1, rule="py/path-injection", path="src/io/a.py"),
+            cs(2, rule="py/path-injection", path="src/io/b.py"),  # same directory, other file
+            cs(3, rule="py/path-injection", path="src/io/a.py", line=99),  # same file again
+            cs(
+                4, rule="py/path-injection", path="src/io/deep/c.py"
+            ),  # a subdirectory is another module
+            cs(5, rule="py/path-injection", path="src/other/a.py"),  # other directory
+            cs(6, rule="py/sql-injection", path="src/io/a.py"),  # other rule, same directory
+            cs(7, rule="py/path-injection", path="top.py"),  # repo root
+            cs(8, rule="py/path-injection", path="main.py"),  # repo root, same module as top.py
+            cs(9, rule="py/path-injection", path=""),  # no file path: never grouped
+        ]
+    }
+    gh, jira = FakeGh(alerts), FakeJira()
+    sweep(gh, jira)
+    by_summary = {i.summary: alert_label_set(i) for i in jira.issues}
+    assert by_summary["[py/path-injection] src/io/"] == {
+        "finding-codeql-1",
+        "finding-codeql-2",
+        "finding-codeql-3",
+    }
+    assert by_summary["[py/path-injection] src/io/deep/"] == {"finding-codeql-4"}
+    assert by_summary["[py/path-injection] src/other/"] == {"finding-codeql-5"}
+    assert by_summary["[py/sql-injection] src/io/"] == {"finding-codeql-6"}
+    assert by_summary["[py/path-injection] ./"] == {"finding-codeql-7", "finding-codeql-8"}
+    assert by_summary["[py/path-injection] alert 9"] == {"finding-codeql-9"}
+    assert len(jira.issues) == 6
+
+
+def test_secret_alerts_are_never_grouped():
+    gh, jira = FakeGh({"secret-scanning": [sec(1), sec(2)]}), FakeJira()
+    assert sweep(gh, jira).issues_created == 2 and len(jira.issues) == 2
+
+
+def grouped_alerts():
+    return {
+        "dependabot": [dep(n, package="libx", manifest="uv.lock") for n in (1, 2, 3)],
+        "code-scanning": [
+            cs(n, rule="py/path-injection", path=f"src/io/f{n}.py") for n in (10, 11)
+        ],
+    }
+
+
+def test_two_sweeps_create_one_issue_per_group():
+    gh, jira = FakeGh(grouped_alerts()), FakeJira()
+    first = sweep(gh, jira)
+    assert first.issues_created == 2 and len(jira.issues) == 2
+    assert first.alerts_found == 5 and first.alerts_filed == 5
+
+    second = sweep(gh, jira)  # same alerts, nothing changed
+    assert second.created == [] and second.joined == [] and second.already_tracked == 5
+    assert len(jira.issues) == 2
+    assert sweep(gh, jira).issues_created == 0 and len(jira.issues) == 2
+
+
+def test_per_alert_mode_when_the_human_asks():
+    gh, jira = FakeGh(grouped_alerts()), FakeJira()
+    report = sweep(gh, jira, grouping=False)
+    assert report.issues_created == 5 and len(jira.issues) == 5
+    assert all(len(alert_labels(i)) == 1 for i in jira.issues)
+    assert any(i.summary.endswith("(alert 1)") for i in jira.issues)
+    assert any(i.summary == "[py/path-injection] src/io/f10.py:10" for i in jira.issues)
+
+    # a later grouped run never joins those per-alert issues: their summaries are not groups
+    alerts = grouped_alerts()
+    alerts["dependabot"].append(dep(4, package="libx", manifest="uv.lock"))
+    gh.alerts = alerts
+    later = sweep(gh, jira)
+    assert later.issues_created == 1 and later.joined == []
+    assert later.created[0].summary == "[libx] uv.lock"
+
+
+def test_group_with_an_open_alert_is_not_done():
+    alerts = grouped_alerts()
+    gh, jira = FakeGh(alerts), FakeJira()
+    sweep(gh, jira)
+    group = next(i for i in jira.issues if i.summary == "[libx] uv.lock")
+    group.status = "In Review"  # the fix PR is merged and reviewed; the scanner agrees only in part
+    deps = alerts["dependabot"]
+    deps[0]["state"] = "fixed"
+    deps[1]["state"] = "fixed"
+
+    assert close(gh, group) is False  # alert 3 is still open: it blocks Done
+    assert group.status == "In Review"
+    assert deps[2]["html_url"] in group.comments[-1] and "state is open" in group.comments[-1]
+    assert deps[0]["html_url"] not in group.comments[-1]  # only the blocking alert is named
+
+    deps[2]["state"] = "fixed"
+    assert close(gh, group) is True and group.status == "Done"
+    for a in deps:  # the closing comment cites every alert and the state read
+        assert f"{a['html_url']} state fixed" in group.comments[-1]
+
+
+def test_group_with_dismissed_alert_needs_the_recorded_approval():
+    alerts = {"dependabot": [dep(n, package="libx", manifest="uv.lock") for n in (1, 2, 3)]}
+    gh, jira = FakeGh(alerts), FakeJira()
+    sweep(gh, jira)
+    group = jira.issues[0]
+    alerts["dependabot"][0]["state"] = "fixed"
+    alerts["dependabot"][1]["state"] = "dismissed"  # dismissed in the UI, no approval on the issue
+    alerts["dependabot"][2]["state"] = "fixed"
+    assert close(gh, group) is False and group.status == "To Do"  # `dismissed` is not `fixed`
+
+    # an approved dismissal of one alert does not close the group while another alert is open
+    alerts["dependabot"][2]["state"] = "open"
+    dismiss(gh, group, "dependabot", 2, "false positive", approved_by="the owner")
+    assert group.status == "To Do"
+    # ... and once the rest are fixed, the approved dismissal counts and the group closes
+    alerts["dependabot"][2]["state"] = "fixed"
+    assert close(gh, group) is True and group.status == "Done"
+    assert "finding-dependabot-2 dismissed, approved by the owner" in group.comments[-1]
+
+    # dismissing the last open alert is what closes a group whose other alerts are fixed
+    gh2, jira2 = (
+        FakeGh({"dependabot": [dep(n, package="p", manifest="m") for n in (1, 2)]}),
+        FakeJira(),
+    )
+    sweep(gh2, jira2)
+    gh2.alerts["dependabot"][0]["state"] = "fixed"
+    dismiss(gh2, jira2.issues[0], "dependabot", 2, "won't fix", approved_by="the owner")
+    assert jira2.issues[0].status == "Done"
+
+
+def test_new_alert_joins_an_existing_open_group():
+    alerts = {
+        "dependabot": [dep(1, "high", package="libx", manifest="uv.lock")],
+        "code-scanning": [cs(10, "high", rule="py/r", path="src/a/x.py")],
+    }
+    gh, jira = FakeGh(alerts), FakeJira()
+    sweep(gh, jira)
+    group = next(i for i in jira.issues if i.summary == "[libx] uv.lock")
+    group.status = "In Progress"
+    before = len(jira.issues)
+
+    alerts["dependabot"].append(dep(2, "critical", package="libx", manifest="uv.lock"))
+    alerts["dependabot"].append(dep(3, "low", package="libx", manifest="other/uv.lock"))
+    alerts["code-scanning"].append(cs(11, "low", rule="py/r", path="src/b/y.py"))  # other directory
+    report = sweep(gh, jira)
+
+    assert group.labels == ["finding", "finding-dependabot-1", "finding-dependabot-2"]
+    assert "https://example.test/dep/2" in "\n".join(group.comments)
+    assert any("In Progress" in c and "may not cover" in c for c in group.comments)
+    assert group.priority == "critical"  # raised by the new alert; never lowered by a lower one
+    assert report.joined == [group] and report.already_tracked == 2
+    # the two alerts that fit no open group each opened their own issue; nothing else was touched
+    assert report.issues_created == 2 and len(jira.issues) == before + 2
+    other = next(i for i in jira.issues if i.summary == "[libx] other/uv.lock")
+    assert alert_label_set(other) == {"finding-dependabot-3"}
+
+    alerts["dependabot"].append(dep(4, "low", package="libx", manifest="uv.lock"))
+    sweep(gh, jira)
+    assert group.priority == "critical" and "finding-dependabot-4" in group.labels
+
+
+def test_new_alert_for_a_done_group_gets_a_new_issue():
+    alerts = {"dependabot": [dep(1, package="libx", manifest="uv.lock")]}
+    gh, jira = FakeGh(alerts), FakeJira()
+    sweep(gh, jira)
+    done = jira.issues[0]
+    alerts["dependabot"][0]["state"] = "fixed"
+    assert close(gh, done) and done.status == "Done"
+
+    alerts["dependabot"].append(dep(2, package="libx", manifest="uv.lock"))  # a new advisory
+    report = sweep(gh, jira)
+    assert report.issues_created == 1 and report.joined == [] and report.reopened == []
+    new = report.created[0]
+    assert new is not done and alert_label_set(new) == {"finding-dependabot-2"}
+    assert done.status == "Done" and alert_label_set(done) == {"finding-dependabot-1"}
+
+    alerts["dependabot"].append(dep(3, package="libx", manifest="uv.lock"))
+    sweep(gh, jira)  # joins the open one, not the Done one
+    assert alert_label_set(new) == {"finding-dependabot-2", "finding-dependabot-3"}
+    assert alert_label_set(done) == {"finding-dependabot-1"} and len(jira.issues) == 2
+
+
+def test_reopened_alert_of_a_done_group_reopens_that_issue():
+    alerts = {"dependabot": [dep(n, package="libx", manifest="uv.lock") for n in (1, 2)]}
+    gh, jira = FakeGh(alerts), FakeJira()
+    sweep(gh, jira)
+    group = jira.issues[0]
+    for a in alerts["dependabot"]:
+        a["state"] = "fixed"
+    assert close(gh, group) and group.status == "Done"
+
+    alerts["dependabot"][1]["state"] = "open"  # one alert is open again
+    report = sweep(gh, jira)
+    assert report.reopened == [group] and group.status == "To Do"
+    assert report.created == [] and len(jira.issues) == 1
+
+
+def test_the_cap_counts_issues_not_alerts():
+    # 12 groups of 2 alerts: 24 alerts, but the cap is 10 issues
+    alerts = {
+        "dependabot": [
+            dep(g * 2 + k, "high", package=f"pkg-{g}", manifest="uv.lock")
+            for g in range(12)
+            for k in (1, 2)
+        ]
+    }
+    gh, jira = FakeGh(alerts), FakeJira()
+    first = sweep(gh, jira)
+    assert first.issues_created == BATCH_LIMIT == 10 and len(jira.issues) == 10
+    assert first.alerts_found == 24 and first.alerts_filed == 20  # 20 alerts rode on 10 issues
+    assert len(first.joined) == 10
+    assert first.unfiled == {"high": 4}  # the two groups past the cap are reported as alerts
+    assert all(len(alert_labels(i)) == 2 for i in jira.issues)
+
+    second = sweep(gh, jira)  # a later run files the remaining two groups, one issue each
+    assert second.issues_created == 2 and second.alerts_filed == 4 and len(jira.issues) == 12
+
+
+def test_alerts_joining_a_group_do_not_use_up_the_cap():
+    alerts = {
+        "dependabot": [dep(n, "critical", package="big", manifest="uv.lock") for n in range(1, 31)]
+        + [dep(100 + n, "high", package=f"p{n}", manifest="uv.lock") for n in range(9)]
+    }
+    report = sweep(FakeGh(alerts), FakeJira())
+    assert report.issues_created == 10 and report.unfiled == {}
+    assert report.alerts_found == 39 and report.alerts_filed == 39  # 39 alerts in 10 issues
+
+
+def test_report_gives_alerts_and_issues():
+    gh, jira = FakeGh(grouped_alerts()), FakeJira()
+    report = sweep(gh, jira)
+    assert (report.alerts_found, report.alerts_filed, report.issues_created) == (5, 5, 2)
+    assert len(report.joined) == 3  # the 3 alerts that joined an issue opened in the same run
+
+    plain = sweep(FakeGh(three_alerts()), FakeJira())  # nothing groups: the two counts are equal
+    assert plain.alerts_filed == plain.issues_created == 3
+
+    capped = sweep(
+        FakeGh({"code-scanning": [cs(1, "critical"), cs(2, "low"), cs(3, "medium")]}), FakeJira()
+    )
+    assert capped.alerts_found == 3 and capped.alerts_filed == 1 and capped.issues_created == 1
+    assert capped.unfiled == {"low": 1, "medium": 1}  # left-out alerts are counted as alerts
 
 
 # --- AC3: sync into a scratch adopted project --------------------------------------------
