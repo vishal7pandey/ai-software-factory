@@ -498,5 +498,83 @@ def check_protections(root: Path | str, gh: _harden.Gh | None = None) -> list[Fi
     return out
 
 
+SONAR_PLACEHOLDER = _installer.SONAR_PLACEHOLDER
+SONAR_SECRET = "SONAR_TOKEN"
+SONAR_PROPERTIES = "sonar-project.properties"
+# One page of the repository secret list; a name past it is "unknown", not absent.
+SECRETS_PAGE = 100
+
+_PRESENT, _ABSENT, _UNKNOWN, _SKIPPED = "present", "absent", "unknown", "skipped"
+
+
+def sonar_placeholders(text: str) -> list[str]:
+    """Keys of the non-comment lines of a properties file that still hold the placeholder."""
+    keys: list[str] = []
+    for line in text.splitlines():
+        s = line.strip()
+        if s and not s.startswith("#") and SONAR_PLACEHOLDER in s:
+            keys.append(re.split(r"[=:]", s, maxsplit=1)[0].strip())
+    return keys
+
+
+def _sonar_secret(root: Path, gh: _harden.Gh) -> tuple[str, str]:
+    """(state, detail) of the repository Actions secret. Reads the secret NAMES only: the endpoint
+    never returns a value and nothing but a name is looked at. Failures carry the status only."""
+    try:
+        owner, repo = _harden.repo_slug(root)
+    except FactoryError:
+        return _SKIPPED, "skipped (no github.com origin remote)"
+    status, data = gh("GET", f"repos/{owner}/{repo}/actions/secrets?per_page={SECRETS_PAGE}", None)
+    if status == 0:
+        return _UNKNOWN, "unknown (gh unavailable)"
+    if status != 200 or not isinstance(data, dict):
+        return _UNKNOWN, f"unknown (HTTP {status})"
+    listed = data.get("secrets") if isinstance(data.get("secrets"), list) else []
+    if SONAR_SECRET in {s.get("name") for s in listed if isinstance(s, dict)}:
+        return _PRESENT, "present (name only; its value is never read)"
+    total = data.get("total_count")
+    if isinstance(total, int) and total > len(listed):
+        return _UNKNOWN, f"unknown (more than {SECRETS_PAGE} secrets; not all were listed)"
+    return _ABSENT, f"not set - the scan is skipped; the owner runs `gh secret set {SONAR_SECRET}`"
+
+
+def check_sonar(root: Path | str, gh: _harden.Gh | None = None) -> list[Finding]:
+    """SonarCloud setup (FACT-35): is the secret there, is the properties file still a template?
+
+    Never FAIL: Sonar is optional. A project with neither Sonar file gets one OK notice and no
+    GitHub call. While the placeholder remains, a missing secret is only a notice (setup has not
+    started); a missing secret with filled properties, a placeholder with the secret set, and an
+    unreadable secret list are warnings."""
+    root = Path(root)
+    props = root / SONAR_PROPERTIES
+    if not props.is_file() and not (root / _installer.SONAR_WORKFLOW_DEST).is_file():
+        note = "not configured (optional; docs/sonarcloud.md in the factory repo)"
+        return [Finding(OK, "sonar", note)]
+    state, secret_detail = _sonar_secret(root, gh or _harden.gh_api)
+    keys = (
+        sonar_placeholders(props.read_text(encoding="utf-8", errors="replace"))
+        if props.is_file()
+        else []
+    )
+    if not props.is_file():
+        props_finding = Finding(
+            WARN, "sonar: properties", f"{SONAR_PROPERTIES} is missing; the scan is skipped"
+        )
+    elif keys:
+        level = WARN if state == _PRESENT else OK
+        left = ", ".join(keys)
+        detail = f"still has {SONAR_PLACEHOLDER} in {left}; the scan is skipped until set"
+        props_finding = Finding(level, "sonar: properties", detail)
+    else:
+        props_finding = Finding(OK, "sonar: properties", "no placeholder left")
+    secret_level = {
+        _PRESENT: OK,
+        _SKIPPED: OK,
+        _ABSENT: OK if keys else WARN,
+        _UNKNOWN: WARN,
+    }[state]
+    return [props_finding, Finding(secret_level, f"sonar: {SONAR_SECRET}", secret_detail)]
+
+
 def format_findings(findings: list[Finding]) -> list[str]:
     return [f"{f.level:<5} {f.name:<28} {f.detail}" for f in findings]
