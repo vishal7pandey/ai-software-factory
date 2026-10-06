@@ -69,3 +69,16 @@ SonarCloud's main branch for this project is named `master` while the repository
 `main`, so analyses of `main` are stored as a short-lived branch and the API refuses to read them
 ("Organization is not allowed to access data from non main branches"). AC3 can then only be proven
 once the owner renames the SonarCloud main branch to `main`.
+
+## Amendment 2026-10-06 (found on the first PR scan, PR 16)
+
+The first fix (pytest-cov into the dev group, no `--with`) did not clear the issue: SonarCloud's analysis of PR 16
+still reports `githubactions:S8544` (and `S8541`) on `sonar.yml` line 58, at columns 13-19, which is the text
+`uv run` itself, not `--with`. Corrected root cause: the rule flags a bare `uv run`, which re-resolves
+the lock if needed and may build packages. Corrected fix: `uv run --locked --no-sync ...` (the preceding
+`uv sync --all-extras --all-groups` step already built the environment; `--locked` fails when the lock is
+stale; `--no-sync` builds nothing; `--no-build` is not usable because the project itself is an editable
+build). The regression criterion AC1 also pins `--locked` and `--no-sync` now. This is a refinement inside
+the same approved scope (same issue, same file, same line), recorded here instead of re-approving.
+Lines 55 (`uv sync`) and `ci.yml:26` carry the same rule family on main and stay out of scope (the other
+Sonar issues are not taken in this item).

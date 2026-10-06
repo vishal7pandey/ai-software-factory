@@ -20,6 +20,8 @@ repo's `sonar.yml` without `--with`.
 
 ## Approach
 
+(Amended, see the spec: the workflow step is `uv run --locked --no-sync python -m pytest ...`.)
+
 `uv add --dev pytest-cov` updates `pyproject.toml` and `uv.lock` (only new packages `pytest-cov` and
 `coverage`); the workflow step becomes `uv run python -m pytest ...`. `ci.yml` runs `uv sync`, which
 installs the dev group too, so CI gains the package without a change.
