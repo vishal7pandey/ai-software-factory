@@ -6,10 +6,12 @@ import re
 import shutil
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
-from swfactory import common
+from swfactory import common, deps
 from swfactory.common import FactoryError
+from swfactory.harden import Gh
 from swfactory.verify import (
     DELEGATED_SUFFIX,
     ITEM_KEYS,
@@ -340,13 +342,26 @@ def format_table(rows: list[tuple[str, ...]]) -> str:
     )
 
 
-def cmd_status(show_all: bool, start: Path | str = ".") -> int:
+def cmd_status(
+    show_all: bool,
+    start: Path | str = ".",
+    gh: Gh | None = None,
+    now: datetime | None = None,
+) -> int:
+    """The work-item table, then (GitHub projects only) the read-only dependency summary of
+    `swfactory.deps`. The summary never changes the exit code: what it cannot read prints
+    `unknown`."""
     root = project_root(start)
     rows = collect_status(root, show_all)
     if not rows:
         print("No work items." if show_all else "No open work items (use --all to include done).")
-        return 0
-    print(format_table(rows))
+    else:
+        print(format_table(rows))
+    summary = deps.for_project(root, gh, now)
+    if summary is not None:
+        print()
+        for line in summary.lines():
+            print(line)
     return 0
 
 

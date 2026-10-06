@@ -15,7 +15,7 @@ from pathlib import Path
 
 import yaml
 
-from swfactory import __version__, adopt_inspect, common
+from swfactory import __version__, adopt_inspect, common, dependabot
 from swfactory.common import FactoryError
 
 BEGIN = "<!-- factory:begin -->"
@@ -302,6 +302,12 @@ def _install(
     for item in items:
         if item.mode == "create" and PROJECT_KEY_TOKEN in item.content:
             item.content = item.content.replace(PROJECT_KEY_TOKEN, _sonar_project_key(root))
+        if (
+            item.mode == "create"
+            and item.dest == dependabot.DEST
+            and not (root / item.dest).exists()
+        ):
+            item.content = dependabot.render_for(root, item.content)
         if (
             inspection is not None
             and item.dest == SONAR_WORKFLOW_DEST

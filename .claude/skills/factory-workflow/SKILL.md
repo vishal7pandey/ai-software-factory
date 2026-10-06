@@ -1,6 +1,6 @@
 ---
 name: factory-workflow
-description: Use when starting or resuming ANY engineering task in a repo that has adopted the factory kit (a feature, bug, refactor, incident, security finding, or chore) and you must decide where to enter and which skill comes next. Reads the work item state and routes to factory-spec, factory-plan, factory-test, factory-implement, factory-review, factory-diagnose, factory-findings (scanner alerts) or factory-release. Do not use to do the work itself, and do not use for questions that need no repo change.
+description: Use when starting or resuming ANY engineering task in a repo that has adopted the factory kit (a feature, bug, refactor, incident, security finding, or chore) and you must decide where to enter and which skill comes next. Reads the work item state and routes to factory-spec, factory-plan, factory-test, factory-implement, factory-review, factory-diagnose, factory-findings (scanner alerts), factory-dependencies (Dependabot PRs) or factory-release. Do not use to do the work itself, and do not use for questions that need no repo change.
 ---
 
 # factory-workflow — the router
@@ -11,7 +11,7 @@ description: Use when starting or resuming ANY engineering task in a repo that h
 - Not for doing the work: this skill only routes. Not for pure questions or read-only investigation.
 
 ## Inputs
-- `AGENTS.md` and every file in `.factory/policies/` (`security.md`, `git.md`, `testing.md`, `production.md`, `autonomy.md`, `findings.md`). Read them at the start of the session, not when something goes wrong.
+- `AGENTS.md` and every file in `.factory/policies/` (`security.md`, `git.md`, `testing.md`, `production.md`, `autonomy.md`, `findings.md`, `dependencies.md`). Read them at the start of the session, not when something goes wrong.
 - `.factory/factory.yaml` (`autonomy`, `tracker`, `environments`).
 - The request, and any work item id, Jira key, branch name or PR the human mentioned.
 - `docs/work/<id>-<slug>/item.yaml` and the files beside it (`spec.md`, `plan.md`, `test-plan.md`, `notes.md`).
@@ -29,9 +29,10 @@ description: Use when starting or resuming ANY engineering task in a repo that h
    | Production incident | Mitigate first (rollback, flag off, scale — per `production.md`); record what you did in `notes.md`; then open a bug item and take the bug path |
    | Security finding | Validate it is real and reachable, assess impact and exposure, then bug path; `risk: high`; `factory-review` must include a security pass |
    | Scanner findings (open code scanning, Dependabot, secret scanning or SonarQube alerts; a PR with a new alert) | `factory-findings` lists and tracks them (one Jira Bug per group of same-package or same-rule alerts, else per alert; label `finding`), then each takes the bug path; closure rule below |
+   | Open Dependabot PRs, or a dependency summary that needs attention (`factory status`) | `factory-dependencies` merges only the PRs that meet every condition of `dependencies.md` (patch or minor, required checks green, manifest and lockfile only, tracked alert or scheduled update); every other one becomes a work item; alerts with no PR go to `factory-findings` |
    | Chore / docs / deps | Exempt, see below |
 
-4. **Exempt chores.** No work item, branch `chore/…`, `docs/…` or `deps/…`, only when ALL hold: tiny (roughly < 50 lines changed), no change to runtime behaviour, no schema/API/config-semantics change, no auth/security-relevant change, CI is green. Examples: typo and README fixes, comment edits, patch-level dependency bumps with unchanged tests. A dependency bump that needs code changes or touches auth/crypto is not a chore: make it an item. If in doubt, make it an item.
+4. **Exempt chores.** No work item, branch `chore/…`, `docs/…` or `deps/…`, only when ALL hold: tiny (roughly < 50 lines changed), no change to runtime behaviour, no schema/API/config-semantics change, no auth/security-relevant change, CI is green. Examples: typo and README fixes, comment edits, patch-level dependency bumps with unchanged tests. A dependency bump that needs code changes or touches auth/crypto is not a chore: make it an item. A Dependabot PR is not a chore either: it follows `factory-dependencies`. If in doubt, make it an item.
 5. **Route by status** (existing items):
 
    | status | next | who moves it on |

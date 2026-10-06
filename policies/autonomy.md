@@ -15,7 +15,7 @@ Mode is set in `.factory/factory.yaml › autonomy`.
 
 ## ASK FIRST (state what and why, wait for a yes)
 
-* Adding or upgrading a dependency.
+* Adding or upgrading a dependency (a Dependabot PR under `dependencies.md` is the exception; every other Dependabot PR is a work item).
 * Changing CI, infra, deployment or build configuration.
 * Schema or data migrations.
 * Deleting files outside the scope of the work item.
@@ -27,7 +27,7 @@ Mode is set in `.factory/factory.yaml › autonomy`.
 ## NEVER
 
 * Run `factory approve`, or write `approvals:` entries in `item.yaml`, unless the owner has delegated that gate to you (see Delegated approval). Never record an approval under a human's own name.
-* Merge your own PR.
+* Merge your own PR, or any PR except a Dependabot PR that meets every condition of `dependencies.md` (the one standing exception; the conditions are conjunctive, a major or a failing check never qualifies).
 * Push to `main`; force-push a shared branch.
 * Deploy to production without a fresh, explicit human go-ahead in the current conversation.
 * Disable, skip or delete tests or checks to make something pass.

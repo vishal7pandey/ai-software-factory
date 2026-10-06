@@ -1,0 +1,31 @@
+# Dependabot version updates, laid in by `factory adopt` / `factory sync` for the ecosystems this project uses.
+# It is yours to edit: the factory never touches this file again. Policy for the PRs it opens:
+# .factory/policies/dependencies.md (skill factory-dependencies).
+#
+# * One PR a week per ecosystem, minor and patch updates grouped; a major is always its own PR.
+# * Security updates are a repository setting (`factory harden`), not part of this file; they stay on.
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]

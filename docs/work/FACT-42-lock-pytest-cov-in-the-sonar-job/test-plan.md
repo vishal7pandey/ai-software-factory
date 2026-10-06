@@ -8,8 +8,8 @@ Test framework and conventions found: pytest, `tests/test_*.py`, `common.FACTORY
 | AC | Level | Test (name/path) | Happy | Boundary | Negative | Status |
 |----|-------|------------------|-------|----------|----------|--------|
 | AC1 | unit | tests/test_sonar_self.py::test_the_coverage_step_installs_nothing_outside_the_lockfile | no `--with` in the step; `pytest-cov` in pyproject and uv.lock | both pyproject and the lock are checked | a `--with` in the step, or a pyproject entry without a lock entry, fails | verified |
-| AC2 | manual | PR checks and the SonarQube tools on the PR analysis | `sonar` job scans, no S8544 on sonar.yml | n/a | n/a: a refusal shows in the job log | planned |
-| AC3 | manual | SonarCloud API after merge | issue closed/resolved | n/a | an issue still OPEN keeps the Bug open | planned |
+| AC2 | manual | PR checks and the SonarQube tools on the PR analysis | `sonar` job scans, no S8544 on sonar.yml | n/a | n/a: a refusal shows in the job log | verified |
+| AC3 | manual | SonarCloud API after merge | issue closed/resolved | n/a | an issue still OPEN keeps the Bug open | verified |
 
 ## Regression risk
 
@@ -35,3 +35,12 @@ the full suite; ruff check and format, `factory lint`, `factory sync --check .` 
 after the fix: the step put back to `uv run --with pytest-cov python -m pytest` makes the same test fail
 (1 failed); restored (`git diff` shows only the intended change; 5 passed). AC2 and AC3 stay `planned`
 until verified on the PR and after merge (see the Jira comments on FACT-42).
+
+## Live verification (2026-10-06)
+
+- AC2: PR 16 `sonarcloud` job scanned; its PR analysis reported both issues of line 58 (`S8544`, `S8541`)
+  `CLOSED / FIXED` after the second commit (the first commit, which only removed `--with`, did not clear them:
+  the rule flags a bare `uv run`; spec amended).
+- AC3: after merge and the push-to-main analysis, the public API shows `AaESHaxTBv0rcil6sMek` (`S8544`,
+  `sonar.yml` line 58) with status CLOSED and resolution FIXED. The sibling `S8541` on that line
+  (`AaESHaxTBv0rcil6sMej`, omitted `--no-build`) is a separate, unfiled issue and is still open.
