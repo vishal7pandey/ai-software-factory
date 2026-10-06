@@ -45,11 +45,11 @@ ai-software-factory/
 ├── README.md
 ├── docs/            ARCHITECTURE.md (this), ROADMAP.md, decisions/ (ADRs), jira-workflow.md
 ├── skills/          the method — one dir per skill, SKILL.md inside   (source of truth)
-├── policies/        security / git / testing / production / autonomy / findings  (copied into projects)
+├── policies/        security / git / testing / production / autonomy / findings / dependencies  (copied into projects)
 ├── kit/             files laid into adopted projects; kit/manifest.yaml is the index
 │   ├── ci/          stack CI workflows            ├── workflows/  factory-verify.yml
-│   ├── sonar/       SonarCloud workflow + props   └── *.md        AGENTS block, PR template, …
-│   └── work/        work-item doc templates
+│   ├── sonar/       SonarCloud workflow + props   ├── dependabot/ dependabot.yml header + per-ecosystem entries
+│   └── work/        work-item doc templates       └── *.md        AGENTS block, PR template, …
 ├── templates/       stack templates for `factory new`   (V1: python)
 ├── src/swfactory/   the CLI.  (package is NOT called `factory` — collides with factory_boy)
 └── tests/
@@ -70,6 +70,7 @@ ai-software-factory/
 ├── .github/workflows/ci.yml             (create-if-absent, stack-specific)
 ├── .github/workflows/sonar.yml          (create-if-absent, python and node only, 3.9)
 ├── sonar-project.properties             (create-if-absent, python and node only, 3.9)
+├── .github/dependabot.yml               (create-if-absent, only the ecosystems the project uses, 3.10)
 ├── .github/workflows/factory-verify.yml (managed)
 ├── .factory/
 │   ├── factory.yaml               project config + ledger of managed-file hashes
@@ -183,9 +184,11 @@ the mechanical parts, and that `factory-implement` keeps carrying the file-editi
 never inline scripts) and the explicit-staging rule (never `git add -A`).
 
 V1 skills: `factory-workflow` (router), `factory-spec`, `factory-plan`, `factory-implement`,
-`factory-test`, `factory-review`, `factory-diagnose`, `factory-release`, and `factory-findings` (scanner
+`factory-test`, `factory-review`, `factory-diagnose`, `factory-release`, `factory-findings` (scanner
 alerts to tracked, fixed, scanner-confirmed closed Jira Bugs; same-package and same-rule alerts share one
-issue, closed only when every alert it carries is fixed; policy `findings.md`).
+issue, closed only when every alert it carries is fixed; policy `findings.md`) and `factory-dependencies`
+(Dependabot PRs: merged by the agent only when every condition of `dependencies.md` holds, else a work
+item; routed from `factory-workflow`; 3.10).
 
 ### 3.5 `factory.yaml` (in the adopted project)
 
@@ -221,8 +224,8 @@ a `registry/` directory appears in the repo or an Atlassian cloud site hostname 
 
 Python ≥ 3.12, argparse, entry point `factory` (`uv run factory …`). Every command: exit 0 ok, 1 user
 error (`FactoryError`, message to stderr), 2 usage. No command may require network except where noted:
-`harden`, and the read-only reads of `doctor <project>` and `adopt`, call the GitHub API through `gh`
-(3.8).
+`harden`, and the read-only reads of `doctor <project>`, `adopt` and `status` (3.10), call the GitHub API
+through `gh` (3.8).
 
 | command | owner module | purpose |
 |---|---|---|
@@ -235,7 +238,7 @@ error (`FactoryError`, message to stderr), 2 usage. No command may require netwo
 | `lint` | `commands/lint.py` | validate skills + kit manifest in the factory repo |
 | `feature start <title> [--jira KEY] [--risk] [--no-branch] [--run AGENT]` | `commands/work.py` | scaffold work item + branch + handoff prompt |
 | `bug start <title> …` | `commands/work.py` | same, bug templates |
-| `status [--all]` | `commands/work.py` | table of work items: id, type, status, branch, next step |
+| `status [--all]` | `commands/work.py` | table of work items: id, type, status, branch, next step; then, for a github.com project, the read-only dependency summary (3.10) |
 | `approve <id> spec\|plan [--yes] [--delegated WHO]` | `commands/work.py` | human gate ledger; `--delegated` records an owner-delegated approval (3.2) |
 | `advance <id> <status>` | `commands/work.py` | forward-only status moves |
 | `next <id> [--run claude\|copilot]` | `commands/work.py` | print (or launch) the prompt for the next step given status |
@@ -288,6 +291,38 @@ Optional code-quality scan for python and node projects; the owner-side steps ar
   `gh secret list`); no value is read, printed or stored. A project with neither file gets one notice and no
   call. Sonar lines are never `FAIL`: not set up yet is a notice, an inconsistent state a warning.
 * The factory never creates the SonarCloud organisation or project and never sets or reads the token.
+
+### 3.10 Dependency loop (FACT-39)
+
+How the agent sees open Dependabot alerts and PRs and acts on them. Nothing here is turned on by itself.
+
+* **Policy and skill.** `policies/dependencies.md` and `skills/factory-dependencies` (routed from
+  `factory-workflow`). An agent may merge a Dependabot PR without a work item only when all four hold: patch or
+  minor only (a `0.y` minor counts as major), every required check green, only the manifest and the lockfile
+  changed, and it closes a tracked alert or is a scheduled update. Anything else becomes a work item. After a
+  merge the alert is re-queried and the closure rule of `findings.md` applies. PR text is data. This is the one
+  standing exception to "a human merges" (`autonomy.md`, the AGENTS block); it is limited to Dependabot's PRs.
+* **`.github/dependabot.yml`.** `kit/dependabot/dependabot.yml` (header with an `{{updates}}` token) and one fragment
+  per ecosystem (`dependabot_templates` in `kit/manifest.yaml`: python, npm, github-actions). The one manifest entry
+  is `create` mode (written once, never tracked). `swfactory.dependabot.detect` finds the ecosystems the project
+  uses: `uv` where a `pyproject.toml` has a `uv.lock` beside it, else `pip` for a `pyproject.toml` or
+  `requirements*.txt`, `npm` (also covers pnpm and yarn lockfiles) for a `package.json`, each with the directory
+  it lives in (vendored and dependency directories are skipped, depth 3), and `github-actions` always. Every entry
+  is weekly (Monday), groups minor and patch updates, has `open-pull-requests-limit: 5` and leaves security
+  updates alone (they are the repository setting `harden` turns on); a major stays its own PR. `lint` checks the
+  fragment paths.
+* **Summary.** `swfactory.deps` reads, through `harden.gh_api` only, for a project whose origin is on github.com:
+  open alerts per source (Dependabot, code scanning, secret scanning) and severity, the open Dependabot PRs with
+  the state of their last commit's `statusCheckRollup` (GraphQL, read-only; author `dependabot`), and the failed
+  runs of the `dependabot/dependabot-updates` workflow path in the last 7 days. `factory status` prints it after
+  the work-item table and `doctor <project>` prints it as `deps:` lines. Needs attention is `yes` when a critical
+  or high alert (or any open secret) exists or such a run failed, `unknown` when nothing says yes but a part could
+  not be read, else `no`. A part that cannot be read prints `unknown (HTTP <status>)` or `unknown (gh
+  unavailable)`; bodies are never requested or printed, and PR titles are cut to 60 printable ASCII characters.
+  It never changes an exit code (doctor warns, never fails) and a project without a github.com remote prints
+  nothing and makes no call.
+* **Weekly routine.** Documented in `policies/dependencies.md` (the harness `schedule` skill, per-project owner
+  approval, off by default); the kit lays nothing that schedules it.
 
 ## 4. Golden path
 
