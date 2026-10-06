@@ -14,7 +14,7 @@ root (`factory`), a project (`proj`), `run(...)` and `snapshot(...)`; run all wi
 | AC2 | integration | tests/test_install.py::test_a_dest_reached_through_a_symlink_that_leaves_the_project_is_rejected | n/a: see above | `.github` is a symlink (junction on Windows) to a directory outside | adopt raises, nothing written into the outside directory | verified |
 | AC3 | integration | tests/test_install.py::test_new_rejects_a_template_path_that_climbs_out_of_the_new_project | n/a: `test_new_substitutes_renames_inits_and_adopts` covers the happy path | a template path `../evil.txt` (Path subclass whose `rglob` climbs) | `new` raises, `evil.txt` exists neither beside nor inside the project | verified |
 | AC3 | integration | tests/test_install.py::test_the_registry_is_not_written_through_a_symlink_that_leaves_its_directory | n/a: `test_registry.py` and `test_install.py` registry tests keep the header-preserving write green | registry file is a symlink to another directory | `project_add` raises, the link target keeps its content (skipped without symlink rights) | verified |
-| AC4 | integration | the full suite, plus the Sonar API after merge | existing tests stay green (482 passed) | n/a: manual | an issue still OPEN after the scan keeps the Bug In Progress with a dismissal proposal | planned |
+| AC4 | integration | the full suite, plus the Sonar API after merge | existing tests stay green (602 passed, 1 skipped) | n/a: manual | an issue still OPEN after the scan keeps the Bug In Progress with a dismissal proposal | local verified; Sonar pending after merge |
 
 ## Regression risk
 
@@ -34,7 +34,8 @@ None. AC4's scanner half is a property of the live service (manual checks).
 
 2026-10-06. Failing first: on `d4126a6` the 11 new tests failed with `DID NOT RAISE FactoryError` (1 skipped,
 registry symlink: no symlink rights on this Windows machine; the directory-symlink test uses a junction). After the
-fix: full suite 482 passed, 1 skipped (the registry symlink test, which runs on Linux CI). Deliberate breaks, each
+fix and merge of current `main` (`6d7827e`): `uv run python -m pytest -q` -> 602 passed, 1 skipped (the registry
+symlink test, which runs on Linux CI). Deliberate breaks, each
 restored afterwards (`git diff` shows only the intended change):
 
 | Mutation | Result |
