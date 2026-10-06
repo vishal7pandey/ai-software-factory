@@ -12,12 +12,15 @@ import subprocess
 import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import yaml
 
 from swfactory import __version__
 from swfactory import common as _common
+from swfactory import dependabot as _dependabot
+from swfactory import deps as _deps
 from swfactory import harden as _harden
 from swfactory import installer as _installer
 from swfactory.common import FactoryError
@@ -248,6 +251,21 @@ def lint_manifest(root: Path) -> list[Finding]:
     for key, p in tpls.items():
         if not isinstance(p, str) or not (root / p).is_file():
             fail(f"work_templates.{key}: {p} does not exist")
+
+    dep = data.get("dependabot_templates")
+    if dep is not None or any(
+        isinstance(e, dict) and e.get("dest") == _dependabot.DEST for e in files
+    ):
+        if not isinstance(dep, dict):
+            fail("`dependabot_templates` must be a mapping (the manifest lays in dependabot.yml)")
+            dep = {}
+        for kind in _dependabot.KINDS:
+            p = dep.get(kind)
+            if not isinstance(p, str) or not (root / p).is_file():
+                fail(f"dependabot_templates.{kind}: {p} does not exist")
+        allowed = ", ".join(_dependabot.KINDS)
+        for kind in sorted(set(dep) - set(_dependabot.KINDS)):
+            fail(f"dependabot_templates.{kind}: unknown ecosystem (allowed: {allowed})")
     return out
 
 
@@ -496,6 +514,20 @@ def check_protections(root: Path | str, gh: _harden.Gh | None = None) -> list[Fi
             level = WARN
         out.append(Finding(level, f"repo: {_harden.LABELS[p.key]}", detail))
     return out
+
+
+def check_dependencies(
+    root: Path | str, gh: _harden.Gh | None = None, now: datetime | None = None
+) -> list[Finding]:
+    """The dependency summary of `factory status` as doctor findings (FACT-39).
+
+    Never FAIL: a critical or high alert, a failed Dependabot Updates run and a part that could
+    not be read are warnings, the rest is OK. A project with no github.com remote has nothing to
+    read: one OK line says it was skipped, and no call is made."""
+    summary = _deps.for_project(root, gh, now)
+    if summary is None:
+        return [Finding(OK, "dependencies", "skipped (no github.com origin remote)")]
+    return [Finding(WARN if p.warn else OK, f"deps: {p.name}", p.detail) for p in summary.parts()]
 
 
 SONAR_PLACEHOLDER = _installer.SONAR_PLACEHOLDER

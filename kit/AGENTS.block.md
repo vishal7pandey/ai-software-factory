@@ -8,7 +8,7 @@ plan, committed with the code. Follow it for any non-trivial change.
   Other skills are `factory-*` in the same directory.
 * **Work items:** `docs/work/<id>-<slug>/` — `item.yaml` (state), `spec.md`, `plan.md`,
   `test-plan.md`, `notes.md`. See `docs/work/README.md`.
-* **Policies:** `.factory/policies/` — `autonomy`, `git`, `testing`, `security`, `production`, `findings`.
+* **Policies:** `.factory/policies/` — `autonomy`, `git`, `testing`, `security`, `production`, `findings`, `dependencies`.
   Read `autonomy.md` before acting; it says what you may do alone.
 * **Config:** `.factory/factory.yaml` (stack, autonomy mode, tracker).
 
@@ -16,7 +16,8 @@ plan, committed with the code. Follow it for any non-trivial change.
 
 1. **Spec** approved by a human before planning.
 2. **Plan** approved by a human before code (unless `autonomy: trusted` and `risk: low`).
-3. **Merge** of the pull request — a human merges, never the agent.
+3. **Merge** of the pull request — a human merges, never the agent. The one exception is a Dependabot PR
+   that meets every condition of `.factory/policies/dependencies.md` (skill `factory-dependencies`).
 4. **Production** — only on a fresh explicit go-ahead in the current conversation.
 
 Never run `factory approve` and never write the `approvals:` entries in `item.yaml` yourself.
