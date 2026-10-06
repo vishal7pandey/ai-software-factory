@@ -10,10 +10,10 @@ reading this repo's own `.github/workflows/sonar.yml`, `sonar-project.properties
 |----|-------|------------------|-------|----------|----------|--------|
 | AC1 | unit | tests/test_sonar_self.py::test_properties_have_the_real_organisation_and_project_key | org non-empty, key `vishal7pandey_ai-software-factory`, no `REPLACE_ME` in any value line | all value lines checked (comment lines may mention the marker, as the guard allows) | a placeholder organisation or another key fails it | verified |
 | AC2 | unit | tests/test_sonar_self.py::test_the_test_step_runs_the_own_suite_and_writes_the_coverage_file_the_properties_name, ::test_the_job_python_matches_the_sonar_python_version, ::test_generated_coverage_files_are_ignored_by_git | pytest step has `python -m pytest`, `--cov=src/swfactory`, `--cov-report=xml:coverage.xml`; setup-python 3.12 equals `sonar.python.version` | report path read from the properties, not hard-coded | XML path or Python version changed in one file only fails | verified |
-| AC2 | manual | PR checks: the `sonar` job on this PR | guard enabled, tests pass, scanner finishes, job green | n/a: only a live run proves the scanner accepts the project | n/a: SonarCloud refusal shows in the log and is recorded | planned |
-| AC3 | manual | public SonarCloud API after merge: `components/search_projects`, `qualitygates/project_status`, `issues/search` | project count 1, gate status, issue count printed | n/a: single project | n/a: no token is used, so a private/absent project returns nothing | planned |
-| AC4 | manual | `factory-findings` loop on one Sonar issue, or none exist | issue closed on SonarCloud after a new analysis, Jira Bug Done | n/a | an issue still OPEN keeps the Bug open | planned |
-| AC5 | manual | `mcp__sonarqube__projects` in the agent session | result recorded (count, organisation visible or not) | n/a | not visible: recorded with the owner action | planned |
+| AC2 | manual | PR checks: the `sonar` job on this PR | guard enabled, tests pass, scanner finishes, job green | n/a: only a live run proves the scanner accepts the project | n/a: SonarCloud refusal shows in the log and is recorded | verified |
+| AC3 | manual | public SonarCloud API after merge: `components/search_projects`, `qualitygates/project_status`, `issues/search` | project count 1, gate status, issue count printed | n/a: single project | n/a: no token is used, so a private/absent project returns nothing | verified |
+| AC4 | manual | `factory-findings` loop on one Sonar issue, or none exist | issue closed on SonarCloud after a new analysis, Jira Bug Done | n/a | an issue still OPEN keeps the Bug open | verified |
+| AC5 | manual | `mcp__sonarqube__projects` in the agent session | result recorded (count, organisation visible or not) | n/a | not visible: recorded with the owner action | verified |
 
 ## Regression risk
 
@@ -53,3 +53,17 @@ mutation, then restored (the final run is 4 passed, `git diff` shows only the in
 Checks run on the branch: full suite, `ruff check`, `ruff format --check`, `factory lint`, `factory sync
 --check .` (results in the PR). AC2 live-scan, AC3, AC4, AC5 rows stay `planned` until verified on the PR
 and after merge.
+
+## Live verification (2026-10-06)
+
+- AC2: PR 15 `sonarcloud` job: guard enabled, 470 tests passed, `coverage.xml` parsed by the Cobertura
+  sensor, `ANALYSIS SUCCESSFUL`, `EXECUTION SUCCESS` (pull request 15 analysed). The push-to-main job ran
+  the same way (`Branch name: main, type: long` after the owner renamed SonarCloud's main branch from
+  `master` to `main`; before that, `main` was a side branch with unreadable data).
+- AC3: public API without a token after the post-rename scan of main: `search_projects` for the organisation
+  returned 3 projects (ade, chatpid, ai-software-factory), gate `OK` (5 conditions OK), 52 open issues on
+  main after FACT-42 (53 before: 24+19+5+4 by severity, 28 code smells, 24 vulnerabilities, 0 bugs),
+  coverage 93.6 percent.
+- AC4: one issue taken through `factory-findings`: FACT-42 (issue `AaESHaxTBv0rcil6sMek`,
+  `githubactions:S8544`, `sonar.yml` line 58) is CLOSED / FIXED on main after the analysis of the fix.
+- AC5: `mcp__sonarqube__projects` lists the same 3 projects: the MCP server is connected to this organisation.
