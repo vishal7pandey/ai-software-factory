@@ -92,6 +92,13 @@ ai-software-factory/
 Hashes are of the file content with `\r\n` normalised to `\n` (Windows!). All operations are
 idempotent: running `adopt` twice yields no diff. `--dry-run` prints the plan and writes nothing.
 
+**Containment (FACT-43).** `adopt`, `sync` and `new` write only inside the project root. Every
+destination (a manifest `dest`, a skill target from `factory.yaml`, a template path) is resolved
+with `os.path.realpath` and must lie strictly under the realpath of the root; otherwise the command
+fails with "outside the project" before the first file is written (a `..`, an absolute path or a
+symlink that leaves the project is rejected). The registry file is written only if it resolves
+inside its own directory.
+
 ### 3.2 Work item
 
 Directory `docs/work/<ID>-<slug>/`:
