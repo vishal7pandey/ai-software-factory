@@ -55,3 +55,15 @@ def test_the_job_python_matches_the_sonar_python_version():
 def test_generated_coverage_files_are_ignored_by_git():
     ignored = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
     assert "coverage.xml" in ignored and ".coverage" in ignored
+
+
+def test_the_coverage_step_installs_nothing_outside_the_lockfile():
+    """FACT-42 (Sonar githubactions:S8544): `uv run --with` resolves a fresh, unlocked version."""
+    command = next(s for s in steps() if "pytest" in s.get("run", ""))["run"]
+    assert "--with" not in command
+    # `uv run` itself is what the rule flags: it must neither re-resolve nor build anything here
+    assert "--locked" in command.split() and "--no-sync" in command.split()
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert "pytest-cov" in pyproject
+    lock = (ROOT / "uv.lock").read_text(encoding="utf-8")
+    assert 'name = "pytest-cov"' in lock
