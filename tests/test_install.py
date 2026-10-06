@@ -6,7 +6,9 @@ Everything runs against a FIXTURE factory root in tmp_path, never the real kit/s
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -711,3 +713,118 @@ def test_new_allows_existing_empty_target_and_unknown_stack_errors(factory, tmp_
     assert run("new", "app", "--dir", str(tmp_path / "work")) == 0
     with pytest.raises(FactoryError, match="no template"):
         run("new", "app2", "--stack", "cobol", "--dir", str(tmp_path / "work"))
+
+
+# --- containment of every write (FACT-43; Sonar pythonsecurity:S2083 at the three write sites) ----
+
+
+def _manifest_with(factory: Path, section: str, entry: str) -> None:
+    """Add one raw manifest entry at the end of `files:` or `dirs:` in the fixture factory."""
+    marker = {"files": "dirs:\n", "dirs": "skills: all\n"}[section]
+    _w(factory / "kit" / "manifest.yaml", MANIFEST.replace(marker, f"  - {entry}\n{marker}"))
+
+
+def _escaping_dests(tmp_path: Path) -> list[str]:
+    outside = tmp_path / "outside.txt"
+    # the last one has the project dir's name as a prefix: only a separator-aware check sees it
+    return ["../outside.txt", "docs/../../outside.txt", str(outside), "../proj-evil.txt"]
+
+
+def _make_symlink_or_skip(link: Path, target: Path) -> None:
+    try:
+        link.symlink_to(target, target_is_directory=True)
+        return
+    except (OSError, NotImplementedError):
+        pass
+    if sys.platform == "win32":  # a junction needs no privilege and resolves the same way
+        made = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(target)], check=False)
+        if made.returncode == 0:
+            return
+    pytest.skip("this machine cannot create symlinks")
+
+
+@pytest.mark.parametrize("mode", ["create", "managed"])
+@pytest.mark.parametrize("which", [0, 1, 2, 3])
+def test_a_manifest_file_dest_outside_the_project_is_rejected_before_any_write(
+    factory, proj, tmp_path, which, mode
+):
+    dest = _escaping_dests(tmp_path)[which]
+    _manifest_with(
+        factory, "files", f"{{src: kit/CLAUDE.md, dest: {json.dumps(dest)}, mode: {mode}}}"
+    )
+    before = snapshot(proj)
+    with pytest.raises(FactoryError, match="outside the project"):
+        run("adopt", str(proj))
+    assert snapshot(proj) == before  # the rejection came before the first write
+    assert not (tmp_path / "outside.txt").exists()
+    assert not (tmp_path / "proj-evil.txt").exists()
+
+
+@pytest.mark.parametrize("dest", ["../elsewhere", "docs/../../elsewhere"])
+def test_a_manifest_dir_dest_outside_the_project_is_rejected_before_any_write(
+    factory, proj, tmp_path, dest
+):
+    _manifest_with(factory, "dirs", f"{{src: policies, dest: {json.dumps(dest)}, mode: managed}}")
+    before = snapshot(proj)
+    with pytest.raises(FactoryError, match="outside the project"):
+        run("adopt", str(proj))
+    assert snapshot(proj) == before
+    assert not (tmp_path / "elsewhere").exists()
+
+
+def test_a_skill_target_outside_the_project_is_rejected_by_sync(factory, proj, tmp_path):
+    assert run("adopt", str(proj)) == 0
+    cfg = config(proj)
+    cfg["skill_targets"] = ["../outside-skills"]
+    common.dump_yaml(cfg, proj / ".factory" / "factory.yaml")
+    before = snapshot(proj)
+    with pytest.raises(FactoryError, match="outside the project"):
+        run("sync", str(proj))
+    assert snapshot(proj) == before
+    assert not (tmp_path / "outside-skills").exists()
+
+
+def test_a_dest_reached_through_a_symlink_that_leaves_the_project_is_rejected(
+    factory, proj, tmp_path
+):
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    _make_symlink_or_skip(proj / ".github", elsewhere)  # the kit writes .github/workflows/...
+    with pytest.raises(FactoryError, match="outside the project"):
+        run("adopt", str(proj))
+    assert not any(elsewhere.rglob("*"))
+
+
+def test_new_rejects_a_template_path_that_climbs_out_of_the_new_project(
+    factory, tmp_path, monkeypatch
+):
+    class Climbing(type(Path())):
+        def rglob(self, pattern, **kwargs):
+            yield self / ".." / "evil.txt"
+
+    _w(factory / "templates" / "evil.txt", "owned\n")
+    monkeypatch.setattr(common, "templates_dir", lambda: Climbing(factory / "templates"))
+    work = tmp_path / "work"
+    with pytest.raises(FactoryError, match="outside the project"):
+        run("new", "app", "--dir", str(work))
+    assert not (work / "evil.txt").exists() and not (work / "app" / "evil.txt").exists()
+
+
+def test_the_registry_is_not_written_through_a_symlink_that_leaves_its_directory(
+    tmp_path, monkeypatch
+):
+    real_dir = tmp_path / "somewhere-else"
+    real_dir.mkdir()
+    victim = real_dir / "victim.yaml"
+    victim.write_text("keep: me\n", encoding="utf-8")
+    reg_dir = tmp_path / "regdir"
+    reg_dir.mkdir()
+    link = reg_dir / "registry.yaml"
+    try:
+        link.symlink_to(victim)
+    except (OSError, NotImplementedError):
+        pytest.skip("this machine cannot create symlinks")
+    monkeypatch.setattr(common, "registry_path", lambda: link)
+    with pytest.raises(FactoryError, match="outside"):
+        installer.project_add("x", stack="docs")
+    assert victim.read_text(encoding="utf-8") == "keep: me\n"
