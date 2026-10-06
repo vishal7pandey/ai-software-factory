@@ -16,6 +16,9 @@ files:
   - {src: kit/sonar/node.yml,               dest: .github/workflows/sonar.yml,          mode: create, stack: node}
   - {src: kit/sonar/python.properties,      dest: sonar-project.properties,             mode: create, stack: python}
   - {src: kit/sonar/node.properties,        dest: sonar-project.properties,             mode: create, stack: node}
+  # Dependabot version updates (FACT-39): the file is rendered from `dependabot_templates` below, one
+  # entry per ecosystem the project uses (src/swfactory/dependabot.py); created once, never touched again.
+  - {src: kit/dependabot/dependabot.yml,    dest: .github/dependabot.yml,               mode: create}
   - {src: kit/workflows/factory-verify.yml, dest: .github/workflows/factory-verify.yml, mode: managed}
   - {src: src/swfactory/verify.py,          dest: .factory/verify.py,                   mode: managed}
   - {src: kit/work-README.md,               dest: docs/work/README.md,                  mode: create}
@@ -35,3 +38,10 @@ work_templates:   # resolved via the factory root by the CLI; in a project they 
   bug_spec:     kit/work/spec.bug.md
   plan:         kit/work/plan.md
   test_plan:    kit/work/test-plan.md
+
+# Per-ecosystem entries of `.github/dependabot.yml` (FACT-39). `{{updates}}` in the file above is replaced by one
+# rendered entry per ecosystem found in the project; `{{directory}}` and `{{ecosystem}}` are filled per entry.
+dependabot_templates:
+  python: kit/dependabot/python.yml          # ecosystem uv (a uv.lock is beside pyproject.toml) or pip
+  npm: kit/dependabot/npm.yml                # covers npm, pnpm and yarn lockfiles
+  github-actions: kit/dependabot/github-actions.yml

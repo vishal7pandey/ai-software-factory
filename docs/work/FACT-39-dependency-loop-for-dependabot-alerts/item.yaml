@@ -1,0 +1,19 @@
+id: FACT-39
+type: feature
+title: Dependency loop for Dependabot alerts and PRs
+slug: dependency-loop-for-dependabot-alerts
+status: merged
+risk: medium
+jira: FACT-39
+branch: feature/fact-39-dependency-loop-for-dependabot-alerts
+created: '2026-10-06'
+approvals:
+  spec:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-06'
+    delegated: true
+  plan:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-06'
+    delegated: true
+pr: https://github.com/vishal7pandey/ai-software-factory/pull/18
