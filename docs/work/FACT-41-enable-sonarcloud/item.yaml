@@ -1,0 +1,19 @@
+id: FACT-41
+type: feature
+title: Enable SonarCloud
+slug: enable-sonarcloud
+status: in-review
+risk: low
+jira: FACT-41
+branch: feature/fact-41-enable-sonarcloud
+created: '2026-10-06'
+approvals:
+  spec:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-06'
+    delegated: true
+  plan:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-06'
+    delegated: true
+pr: null
