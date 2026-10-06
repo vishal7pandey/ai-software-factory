@@ -337,9 +337,8 @@ def dismiss(gh: FakeGh, issue: Issue, api: str, number: int, reason: str, approv
     gh.patch(api, number, **fields)
     issue.dismissed[label(SOURCES[api], number)] = approved_by
     issue.comments.append(f"dismissed: {reason}, approved by {approved_by}")
-    if not check_alerts(gh, issue)[
-        1
-    ]:  # Done only when every other alert of the group is settled too
+    _, blocking = check_alerts(gh, issue)
+    if not blocking:  # Done only when every other alert of the group is settled too
         issue.status = "Done"
 
 
