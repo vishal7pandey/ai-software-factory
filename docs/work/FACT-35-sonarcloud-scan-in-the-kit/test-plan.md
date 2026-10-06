@@ -1,6 +1,6 @@
 # FACT-35 — Test plan: SonarCloud scan in the kit
 
-Status: implementing · Risk: medium · Jira: FACT-35
+Status: in-review · Risk: medium · Jira: FACT-35
 
 Test framework and conventions found: pytest, tests in `tests/test_*.py`, `from swfactory.cli import main`
 with `capsys`, autouse fixtures in `tests/conftest.py` (isolated home, inert `gh`); run everything with
@@ -53,9 +53,21 @@ shows both `sonar:` lines `OK`/`present`, a push shows the `sonarcloud` job runn
 appears in SonarCloud and in the SonarQube tools (`projects` count 1), and one issue is taken through
 `factory-findings`.
 
-Live read check of the doctor secret lookup (`GET repos/{o}/{r}/actions/secrets`): see the PR description
-(the network was unreachable from the agent shell at times; the result of the last attempt is recorded
-there).
+Live read check of the doctor secret lookup (`GET repos/{o}/{r}/actions/secrets`, real `gh`, read-only), run
+from the worktree on 2026-10-06 after the merge of main:
+
+```
+$ factory doctor .
+OK    repo: secret scanning + push protection ok          (and the other three: ok)
+OK    sonar: properties            still has REPLACE_ME in sonar.organization; the scan is skipped until set
+OK    sonar: SONAR_TOKEN           not set - the scan is skipped; the owner runs `gh secret set SONAR_TOKEN`
+doctor: 0 failure(s), 0 warning(s)                                  (exit 0)
+```
+
+The real endpoint answered 200 with the secret list (no `SONAR_TOKEN` yet, as expected); an earlier attempt
+during development failed with a network error and correctly printed `unknown (gh unavailable)`.
+Full gates after merging main (FACT-38): full suite 466 passed (81 new in `tests/test_sonar.py`), ruff check
+and format clean, `factory lint` OK, `factory sync --check .` in sync, `verify.py` OK.
 
 ## Audit (after implementation)
 
