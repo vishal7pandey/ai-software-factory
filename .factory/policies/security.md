@@ -22,6 +22,8 @@
   fallback) and `factory doctor` reports each as ok / off / unknown, failing when one is off on a
   public repo.
 * Turning a protection off, or dismissing what it finds, is a security exception: ask a human first.
+* Optional SonarCloud scan: the guarded `sonar.yml` stays inert until the owner sets `SONAR_TOKEN`
+  (never an agent); steps and `factory doctor` lines are in the factory repo's `docs/sonarcloud.md`.
 
 ## Code
 

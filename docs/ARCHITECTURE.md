@@ -48,7 +48,8 @@ ai-software-factory/
 ├── policies/        security / git / testing / production / autonomy / findings  (copied into projects)
 ├── kit/             files laid into adopted projects; kit/manifest.yaml is the index
 │   ├── ci/          stack CI workflows            ├── workflows/  factory-verify.yml
-│   └── work/        work-item doc templates       └── *.md        AGENTS block, PR template, …
+│   ├── sonar/       SonarCloud workflow + props   └── *.md        AGENTS block, PR template, …
+│   └── work/        work-item doc templates
 ├── templates/       stack templates for `factory new`   (V1: python)
 ├── src/swfactory/   the CLI.  (package is NOT called `factory` — collides with factory_boy)
 └── tests/
@@ -67,6 +68,8 @@ ai-software-factory/
 ├── .github/copilot-instructions.md      (create-if-absent)
 ├── .github/pull_request_template.md     (create-if-absent)
 ├── .github/workflows/ci.yml             (create-if-absent, stack-specific)
+├── .github/workflows/sonar.yml          (create-if-absent, python and node only, 3.9)
+├── sonar-project.properties             (create-if-absent, python and node only, 3.9)
 ├── .github/workflows/factory-verify.yml (managed)
 ├── .factory/
 │   ├── factory.yaml               project config + ledger of managed-file hashes
@@ -227,7 +230,7 @@ error (`FactoryError`, message to stderr), 2 usage. No command may require netwo
 | `sync [path] [--force] [--dry-run] [--check]` | `commands/install.py` | refresh managed files; report conflicts/drift. `--check` writes nothing and exits 1 if a managed file is stale or missing |
 | `new <name> --stack python [--dir]` | `commands/install.py` | copy `templates/<stack>`, `git init`, adopt |
 | `project list\|add\|remove` | `commands/install.py` | registry |
-| `doctor [path]` | `commands/doctor.py` | tools present (git, gh, uv, node, docker, claude); gh auth; for a project: drift/missing kit files and the four repo protections (3.8); exits 1 when one is `off` on a public repo |
+| `doctor [path]` | `commands/doctor.py` | tools present (git, gh, uv, node, docker, claude); gh auth; for a project: drift/missing kit files, the four repo protections (3.8) and the SonarCloud setup lines (3.9); exits 1 when a protection is `off` on a public repo (a Sonar line never fails) |
 | `harden [path] [--dry-run]` | `commands/harden.py` → `swfactory/harden.py` | enable secret scanning + push protection, Dependabot alerts and security updates, CodeQL default setup on the project's GitHub repo (3.8) |
 | `lint` | `commands/lint.py` | validate skills + kit manifest in the factory repo |
 | `feature start <title> [--jira KEY] [--risk] [--no-branch] [--run AGENT]` | `commands/work.py` | scaffold work item + branch + handoff prompt |
@@ -263,6 +266,28 @@ settings, not files, so they cannot be laid in by `adopt` and nothing in git wou
   `not available`, and exits 1 when one is `off` on a **public** repo (a warning on a private one).
   A project without a github.com remote gets one `skipped` line.
 * `adopt` ends by printing the dry-run plan and `factory harden <path>`; it never changes a setting itself.
+
+### 3.9 SonarCloud scan (FACT-35)
+
+Optional code-quality scan for python and node projects; the owner-side steps are in `docs/sonarcloud.md`.
+
+* `kit/sonar/{python,node}.yml` become `.github/workflows/sonar.yml` and `kit/sonar/{python,node}.properties`
+  become `sonar-project.properties`, all `create` mode (never touched by `sync`, not in `managed`). Stacks
+  `docs` and `other` get neither.
+* The only substitution the installer makes is `{{project_key}}` in a `create`-mode template: `<owner>_<repo>`
+  from the GitHub `origin` remote, else the marked placeholder `REPLACE_ME_OWNER_REPO`. The organisation key
+  is the marked placeholder `REPLACE_ME_SONAR_ORGANIZATION` (`installer.SONAR_PLACEHOLDER` is the marker).
+  `adopt` also points a new `sonar.yml` at the default branch.
+* The workflow scans on push to the default branch and on same-repository pull requests, with full history,
+  through `SonarSource/sonarqube-scan-action` (major pin) and the `SONAR_TOKEN` Actions secret. Its first
+  step, the guard, writes `enabled=false` and exits 0 with a notice when the secret is empty, the properties
+  file is missing or a non-comment line holds the marker; every later step waits for `enabled=true`.
+* `doctor <project>` prints `sonar: properties` (marker still there, comment lines ignored) and
+  `sonar: SONAR_TOKEN` (`present`, `not set`, `unknown`, or `skipped` without a github.com remote). The secret
+  is looked up by name through `harden.gh_api` (`GET repos/{o}/{r}/actions/secrets`, the read behind
+  `gh secret list`); no value is read, printed or stored. A project with neither file gets one notice and no
+  call. Sonar lines are never `FAIL`: not set up yet is a notice, an inconsistent state a warning.
+* The factory never creates the SonarCloud organisation or project and never sets or reads the token.
 
 ## 4. Golden path
 
