@@ -1,0 +1,19 @@
+id: FACT-42
+type: bug
+title: Lock pytest-cov in the sonar job
+slug: lock-pytest-cov-in-the-sonar-job
+status: in-review
+risk: low
+jira: FACT-42
+branch: fix/fact-42-lock-pytest-cov-in-the-sonar-job
+created: '2026-10-06'
+approvals:
+  spec:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-06'
+    delegated: true
+  plan:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-06'
+    delegated: true
+pr: null

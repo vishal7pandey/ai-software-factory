@@ -55,7 +55,7 @@ jobs:
         run: uv sync --all-extras --all-groups
       - name: Tests with coverage (the factory's own test command, coverage of src/swfactory)
         if: steps.guard.outputs.enabled == 'true'
-        run: uv run --with pytest-cov python -m pytest -q --cov=src/swfactory --cov-branch --cov-report=xml:coverage.xml
+        run: uv run python -m pytest -q --cov=src/swfactory --cov-branch --cov-report=xml:coverage.xml
       - name: SonarCloud scan
         if: steps.guard.outputs.enabled == 'true'
         uses: SonarSource/sonarqube-scan-action@v8
