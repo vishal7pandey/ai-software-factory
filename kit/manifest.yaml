@@ -11,6 +11,11 @@ files:
   - {src: kit/ci/python.yml,                dest: .github/workflows/ci.yml,             mode: create, stack: python}
   - {src: kit/ci/node.yml,                  dest: .github/workflows/ci.yml,             mode: create, stack: node}
   - {src: kit/ci/generic.yml,               dest: .github/workflows/ci.yml,             mode: create, stack: [docs, other]}
+  # SonarCloud (FACT-35): optional scan, inert until the project sets the secret; python and node only.
+  - {src: kit/sonar/python.yml,             dest: .github/workflows/sonar.yml,          mode: create, stack: python}
+  - {src: kit/sonar/node.yml,               dest: .github/workflows/sonar.yml,          mode: create, stack: node}
+  - {src: kit/sonar/python.properties,      dest: sonar-project.properties,             mode: create, stack: python}
+  - {src: kit/sonar/node.properties,        dest: sonar-project.properties,             mode: create, stack: node}
   - {src: kit/workflows/factory-verify.yml, dest: .github/workflows/factory-verify.yml, mode: managed}
   - {src: src/swfactory/verify.py,          dest: .factory/verify.py,                   mode: managed}
   - {src: kit/work-README.md,               dest: docs/work/README.md,                  mode: create}

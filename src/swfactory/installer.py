@@ -27,6 +27,13 @@ TRACKERS = ("jira", "github", "none")
 MODES = ("create", "managed", "block")
 DEFAULT_SKILL_TARGETS = [".claude/skills", ".github/skills"]
 
+# SonarCloud kit files (FACT-35). The one token a create-mode template may contain is filled at
+# install time; REPLACE_ME marks what only the owner can know (checks.check_sonar and the workflow
+# guard look for it).
+SONAR_PLACEHOLDER = "REPLACE_ME"
+SONAR_WORKFLOW_DEST = ".github/workflows/sonar.yml"
+PROJECT_KEY_TOKEN = "{{project_key}}"
+
 
 # --- manifest -> desired items ----------------------------------------------------------------
 
@@ -248,6 +255,17 @@ def _project_dir(path: str | Path) -> Path:
     return p
 
 
+def _sonar_project_key(root: Path) -> str:
+    """`<owner>_<repo>` from the GitHub origin remote; a marked placeholder when there is none."""
+    from swfactory import harden  # imported here: harden imports this module for the git remote
+
+    try:
+        owner, repo = harden.repo_slug(root)
+    except FactoryError:
+        return f"{SONAR_PLACEHOLDER}_OWNER_REPO"
+    return f"{owner}_{repo}"
+
+
 def _insert_todo(action: Action, todo: str) -> None:
     """Put the TODO commands section directly above the factory block of a new/appended block."""
     if action.data is None or BEGIN.encode() not in action.data:
@@ -274,6 +292,15 @@ def _install(
     block. Existing files are never changed that way, so sync and a second adopt stay no-ops."""
     managed = dict(config["managed"])
     items = collect_items(config["stack"], config["skill_targets"])
+    for item in items:
+        if item.mode == "create" and PROJECT_KEY_TOKEN in item.content:
+            item.content = item.content.replace(PROJECT_KEY_TOKEN, _sonar_project_key(root))
+        if (
+            inspection is not None
+            and item.dest == SONAR_WORKFLOW_DEST
+            and not (root / item.dest).exists()
+        ):
+            item.content = adopt_inspect.point_at_branch(item.content, inspection.default_branch)
     ci_report = adopt_inspect.CiReport()
     if inspection is not None:
         for item in items:

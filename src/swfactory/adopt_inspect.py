@@ -234,6 +234,14 @@ def run_shell(cmd: str, cwd: Path) -> tuple[int, str]:
     return r.returncode, (r.stdout + "\n" + r.stderr).strip()
 
 
+def point_at_branch(content: str, branch: str | None) -> str:
+    """Point a template's push trigger at the default branch (unchanged for `main` or a name that is
+    not a plain branch name)."""
+    if branch and branch != "main" and _BRANCH_NAME.match(branch):
+        return content.replace("branches: [main]", f"branches: [{branch}]")
+    return content
+
+
 def adapt_ci(
     content: str,
     branch: str | None,
