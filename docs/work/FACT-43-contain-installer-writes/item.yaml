@@ -2,7 +2,7 @@ id: FACT-43
 type: bug
 title: Contain installer writes
 slug: contain-installer-writes
-status: in-review
+status: merged
 risk: low
 jira: FACT-43
 branch: fix/fact-43-contain-installer-writes
