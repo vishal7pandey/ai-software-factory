@@ -21,7 +21,8 @@ bugs, on any repo that has adopted the kit. Skills + thin CLI + standalone `veri
 | `factory-infra` repo: Cloudflare Pages/Workers, Supabase, Infisical, OpenTofu | First project that must deploy somewhere that isn't a laptop |
 | Telemetry → Jira bug loop (alert → draft bug item) | A project in prod with real alerts |
 | Cross-project memory ("build this like my other apps") | ≥3 adopted projects with patterns worth reusing; start with a `patterns/` folder of examples before anything vector-shaped |
-| Stack templates: node/Next.js, Cloudflare Worker | Starting a new project of that kind |
+| More stack templates (go, java, rust, dotnet, static site, infrastructure as code), a first-class no-Jira mode, more scanners and non-GitHub hosting | A project that needs one, or the owner choosing an extension from the ranked plan. What is supported today, and what proves it, is [SUPPORT.md](SUPPORT.md); the plan is the Confluence page "Factory generality: assumptions and roadmap" (space FACT) |
+| Node template for `factory new`, pnpm support, Cloudflare Worker | Starting a new project of that kind (a node stack exists for `adopt`, proven by tests only) |
 | Dashboard | Never, until `factory status` across the registry feels inadequate |
 
 ## Explicitly rejected (for now)

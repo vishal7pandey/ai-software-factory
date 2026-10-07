@@ -43,7 +43,7 @@ delegation, which is written in the distinguishable `--delegated` form; CI makes
 ai-software-factory/
 ├── AGENTS.md  CLAUDE.md          how to work ON the factory
 ├── README.md
-├── docs/            ARCHITECTURE.md (this), ROADMAP.md, decisions/ (ADRs), jira-workflow.md
+├── docs/            ARCHITECTURE.md (this), SUPPORT.md (supported today), ROADMAP.md, decisions/ (ADRs), jira-workflow.md
 ├── skills/          the method — one dir per skill, SKILL.md inside   (source of truth)
 ├── policies/        security / git / testing / production / autonomy / findings / dependencies  (copied into projects)
 ├── kit/             files laid into adopted projects; kit/manifest.yaml is the index
@@ -213,7 +213,7 @@ item; routed from `factory-workflow`; 3.10).
 factory_version: 0.1.0
 stack: python                    # python | node | docs | other
 autonomy: supervised             # supervised | trusted
-tracker: {kind: jira, key: PROJ}   # kind: jira | github | none ; key only for jira
+tracker: {kind: jira, key: PROJ}   # kind: jira | github | none ; key only for jira (github is accepted but inert, 3.13)
 skill_targets: [.claude/skills, .github/skills]
 environments: {dev: null, test: null, prod: null}   # URLs/notes; null = skip that stage
 managed:                         # written by adopt/sync — path → sha256 of installed content
@@ -252,7 +252,7 @@ through `gh` (3.8).
 | `project list\|add\|remove` | `commands/install.py` | registry |
 | `doctor [path]` | `commands/doctor.py` | tools present (git, gh, uv, node, docker, claude); gh auth; for a project: drift/missing kit files, the four repo protections (3.8) and the SonarCloud setup lines (3.9); exits 1 when a protection is `off` on a public repo (a Sonar line never fails) |
 | `harden [path] [--dry-run]` | `commands/harden.py` → `swfactory/harden.py` | enable secret scanning + push protection, Dependabot alerts and security updates, CodeQL default setup on the project's GitHub repo (3.8) |
-| `lint` | `commands/lint.py` | validate skills + kit manifest in the factory repo |
+| `lint` | `commands/lint.py` | validate skills + kit manifest in the factory repo, and that `docs/SUPPORT.md` is current (3.13) |
 | `feature start <title> [--jira KEY] [--risk] [--no-branch] [--run AGENT]` | `commands/work.py` | scaffold work item + branch + handoff prompt; a feature in a charter maintenance mode prints a warning (3.12) |
 | `bug start <title> …` | `commands/work.py` | same, bug templates |
 | `status [--all]` | `commands/work.py` | table of work items: id, type, status, branch, next step; then the decisions waiting for the owner (3.11), then the charter progress (3.12), then, for a github.com project, the read-only dependency summary (3.10) |
@@ -407,6 +407,27 @@ A project needs a written, owner-approved definition of done and a stop rule, or
   mode and carries on (not a block, so the owner can proceed deliberately); `bug start` does not warn.
 * **Skills.** `factory-spec` checks proposed work against the charter (in scope, a done criterion, parked, or an
   amendment); `factory-workflow` and `policies/autonomy.md` say who may change it.
+
+### 3.13 Supported today (FACT-48)
+
+The method is generic; the machinery is not. What the factory supports is written in one place, [SUPPORT.md](SUPPORT.md),
+so nobody has to believe more than is true. Everything else in this document is the contract; that file is the
+current claim, and the claim is checked.
+
+* **Matrix.** One row per dimension and value (stack, tracker, hosting, ci, scanner, dependabot ecosystem, os, agent,
+  shape, owners): `status` is `supported`, `partial` or `not supported`, `proven by` names a project and PR, a CI run,
+  "tests only" or "nothing", and `known gaps` says what breaks. A row is `supported` only on evidence from a real
+  project or CI run; a test on a temporary directory makes it at most `partial`.
+* **Checked.** `swfactory.support.check_support(root)` (pure, offline) is run by `factory lint` in the factory repository
+  and by `tests/test_support.py`. It fails when a stack exists (a directory under `templates/`, a file stem under
+  `kit/ci/` or `kit/sonar/`, a `stack:` value in `kit/manifest.yaml`, a name in `STACKS`) without a `stack` row, when a
+  `stack` row claims `supported` or `partial` for a stack that does not exist, when a `dependabot_templates` key has no
+  `dependabot ecosystem` row, when a required dimension has no row, when a row has a bad status or an empty cell, and
+  when this document or `ROADMAP.md` stops linking the file. A new stack therefore arrives with its row, in the same PR.
+* **Known today.** `tracker: github` is accepted by `adopt` and recorded, but nothing reads it. The kit has CI,
+  SonarCloud and Dependabot support for python and node (node proven by tests only); every other stack is adopted as
+  `other`. Hosting, CI and the scanners are GitHub's, Actions and SonarCloud. The ranked plan for each gap is the
+  Confluence page "Factory generality: assumptions and roadmap" (space FACT).
 
 ## 4. Golden path
 
