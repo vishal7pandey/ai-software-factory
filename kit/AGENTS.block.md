@@ -26,6 +26,14 @@ The one exception is an explicit, recorded delegation from the owner naming the 
 only as `factory approve <id> spec|plan --delegated "<owner>"`, never under the owner's own name
 (`.factory/policies/autonomy.md`, Delegated approval). Production is never delegated.
 
+### Decisions that belong to the owner
+
+A choice only the owner can make (a design direction, a finding dismissal, a project charter) is never left only
+in chat: open a decision record in `docs/decisions/` (`factory decision new "<title>" --type design|dismissal|charter|other`),
+recommend one option and stop. `factory status` and `factory inbox` list what waits. Never run `factory decide`:
+the owner answers, and you act only on a record that is `accepted` with `by` and `at`. Charter and dismissal
+decisions are never delegated (`.factory/policies/autonomy.md`, Owner decisions).
+
 ### Checks
 
 Run `python .factory/verify.py` (needs PyYAML) before opening or updating a PR. It checks that

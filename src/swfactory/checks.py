@@ -12,13 +12,14 @@ import subprocess
 import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import yaml
 
 from swfactory import __version__
 from swfactory import common as _common
+from swfactory import decisions as _decisions
 from swfactory import dependabot as _dependabot
 from swfactory import deps as _deps
 from swfactory import harden as _harden
@@ -56,7 +57,7 @@ MAX_DESCRIPTION = 1024
 MODES = {"create", "managed", "block"}
 STACKS = {"python", "node", "docs", "other"}
 
-_APPROVE = re.compile(r"factory approve", re.IGNORECASE)
+_APPROVE = re.compile(r"factory (?:approve|decide)", re.IGNORECASE)
 _PROHIBITION = re.compile(r"\b(never|don't|don’t|do not|must not|human|ask)", re.IGNORECASE)
 _REFERENCE = re.compile(r"references/[A-Za-z0-9_\-./]*[A-Za-z0-9_\-]")
 _SKILL_NAME = re.compile(r"(?<![A-Za-z0-9_])factory-[a-z0-9]+(?:-[a-z0-9]+)*")
@@ -131,8 +132,10 @@ def _skill_findings(skill_dir: Path, all_names: set[str], root: Path) -> list[Fi
         fail("sections out of order; expected: " + " > ".join(s[3:] for s in SKILL_SECTIONS))
 
     for n, line in enumerate(lines, 1):
-        if _APPROVE.search(line) and not _PROHIBITION.search(line):
-            fail(f"line {n} instructs running `factory approve` (only a prohibition/handoff is ok)")
+        gate = _APPROVE.search(line)
+        if gate and not _PROHIBITION.search(line):
+            cmd = gate.group(0).lower()
+            fail(f"line {n} instructs running `{cmd}` (only a prohibition/handoff is ok)")
 
     seen_refs: set[str] = set()
     for ref in _REFERENCE.findall(body):
@@ -251,6 +254,14 @@ def lint_manifest(root: Path) -> list[Finding]:
     for key, p in tpls.items():
         if not isinstance(p, str) or not (root / p).is_file():
             fail(f"work_templates.{key}: {p} does not exist")
+
+    kit_templates = data.get("templates") or {}
+    if not isinstance(kit_templates, dict):
+        fail("`templates` must be a mapping")
+        kit_templates = {}
+    for key, p in kit_templates.items():
+        if not isinstance(p, str) or not (root / p).is_file():
+            fail(f"templates.{key}: {p} does not exist")
 
     dep = data.get("dependabot_templates")
     if dep is not None or any(
@@ -528,6 +539,28 @@ def check_dependencies(
     if summary is None:
         return [Finding(OK, "dependencies", "skipped (no github.com origin remote)")]
     return [Finding(WARN if p.warn else OK, f"deps: {p.name}", p.detail) for p in summary.parts()]
+
+
+def check_decisions(root: Path | str, today: date | None = None) -> list[Finding]:
+    """Decision records waiting for the owner (FACT-46), one WARN each; an invalid record is a WARN
+    too (`factory verify` is what fails on it). Nothing waiting: no finding at all."""
+    today = today or _decisions.today_date()
+    out: list[Finding] = []
+    for rec in _decisions.load_records(root):
+        name = f"decision {rec.id}"
+        if rec.problems:
+            reasons = "; ".join(rec.problems)
+            out.append(Finding(WARN, name, f"invalid: {reasons} - `factory verify` fails on it"))
+        elif rec.waiting:
+            age = _decisions.age_text(_decisions.age_days(rec, today))
+            title = _common.ascii_line(rec.title, _decisions.TEXT_MAX)
+            rec_text = _common.ascii_line(rec.recommended, _decisions.TEXT_MAX)
+            detail = (
+                f"{rec.type}, waiting {age}: {title} (recommended: {rec_text})"
+                f"{' [draft]' if rec.draft else ''} - the owner runs `factory decide {rec.id}`"
+            )
+            out.append(Finding(WARN, name, detail))
+    return out
 
 
 SONAR_PLACEHOLDER = _installer.SONAR_PLACEHOLDER

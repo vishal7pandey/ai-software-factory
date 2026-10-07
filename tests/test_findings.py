@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from swfactory import checks, common
+from swfactory import checks, common, verify
 from swfactory.commands import install as install_cmd
 
 ROOT = common.FACTORY_ROOT
@@ -1028,3 +1028,129 @@ def test_sync_copies_skill_and_policy_into_an_adopted_project(tmp_path):
     assert run("sync", str(proj)) == 0
     assert snapshot(proj) == before
     assert run("sync", "--check", str(proj)) == 0
+
+
+# --- FACT-46: a dismissal is a decision record --------------------------------------------
+
+
+def dismissal_record(api: str, number: int, reason: str, **over) -> dict:
+    """The front matter `factory decision new --type dismissal` writes, before the owner answers."""
+    base = {
+        "id": "D-001",
+        "type": "dismissal",
+        "title": f"Dismiss {api} alert {number}",
+        "status": "proposed",
+        "jira": None,
+        "proposed_by": "agent",
+        "proposed_at": "2026-10-07",
+        "alert": f"https://github.com/o/r/security/{api}/{number}",
+        "reason": reason,
+        "options": [
+            {"text": f"Dismiss the alert as '{reason}'", "recommended": True},
+            {"text": "Do not dismiss: fix the finding instead"},
+        ],
+        "decision": None,
+        "by": None,
+        "at": None,
+        "delegated": False,
+    }
+    base.update(over)
+    return base
+
+
+def accept(record: dict, by: str = "The Owner") -> dict:
+    """What `factory decide D-001 --accept` leaves in the record."""
+    return {
+        **record,
+        "status": "accepted",
+        "decision": record["options"][0]["text"],
+        "by": by,
+        "at": "2026-10-07",
+    }
+
+
+def dismiss_via_record(gh: FakeGh, issue: Issue, api: str, number: int, record: dict) -> None:
+    """Step 6 as the skill now writes it: the call is made only for an `accepted`, valid record
+    whose accepted decision is the dismissal, and the Jira comment cites the record, by and at."""
+    problems = verify.validate_decision(record, f"{record['id']}-x.md")
+    if problems:
+        raise DismissalRefused("invalid record: " + "; ".join(problems))
+    if record["type"] != "dismissal" or record["status"] != "accepted":
+        raise DismissalRefused(f"record {record['id']} is {record['status']}, not accepted")
+    if record["decision"] != record["options"][0]["text"]:
+        raise DismissalRefused("the accepted decision is not the dismissal")
+    dismiss(gh, issue, api, number, record["reason"], approved_by=record["by"])
+    issue.comments.append(
+        f"decision record {record['id']}: {record['by']} on {record['at']}, {record['reason']}"
+    )
+
+
+def test_dismissal_is_applied_only_from_an_accepted_record():
+    alerts = three_alerts()
+    gh, issue = FakeGh(alerts), Issue("X-1", ["finding", label("codeql", 123)], "s")
+    proposed = dismissal_record("code-scanning", 123, "used in tests")
+    with pytest.raises(DismissalRefused, match="proposed, not accepted"):
+        dismiss_via_record(gh, issue, "code-scanning", 123, proposed)
+    rejected = {**proposed, "status": "rejected", "by": "The Owner", "at": "2026-10-07"}
+    with pytest.raises(DismissalRefused, match="rejected, not accepted"):
+        dismiss_via_record(gh, issue, "code-scanning", 123, rejected)
+    no_approver = {**accept(proposed), "by": None}  # accepted but unsigned: verify fails it too
+    with pytest.raises(DismissalRefused, match="invalid record"):
+        dismiss_via_record(gh, issue, "code-scanning", 123, no_approver)
+    other_option = {**accept(proposed), "decision": proposed["options"][1]["text"]}
+    with pytest.raises(DismissalRefused, match="not the dismissal"):
+        dismiss_via_record(gh, issue, "code-scanning", 123, other_option)
+    assert gh.patches == [] and alerts["code-scanning"][0]["state"] == "open"
+
+    dismiss_via_record(gh, issue, "code-scanning", 123, accept(proposed))
+    assert alerts["code-scanning"][0]["state"] == "dismissed"
+    assert issue.status == "Done"
+    assert "decision record D-001: The Owner on 2026-10-07, used in tests" in issue.comments[-1]
+
+
+def test_a_dismissal_record_cannot_be_delegated_to_an_agent():
+    record = accept(
+        dismissal_record("code-scanning", 1, "won't fix"),
+        by="The Owner (delegated to agent)",
+    )
+    record["delegated"] = True
+    problems = verify.validate_decision(record, "D-001-x.md")
+    assert any("dismissal decision is never delegated" in p for p in problems)
+    with pytest.raises(DismissalRefused, match="never delegated"):
+        dismiss_via_record(
+            FakeGh(three_alerts()), Issue("X-1", [], "s"), "code-scanning", 1, record
+        )
+
+
+def test_skill_routes_dismissals_through_a_decision_record():
+    flat = " ".join(SKILL.split())
+    for needle in (
+        "`dismissal` decision record",
+        "factory decision new",
+        "--type dismissal",
+        "docs/decisions/TEMPLATE.md",
+        "factory inbox",
+        "which you never run",
+        "only when the record is `status: accepted`",
+        "No accepted record, no call.",
+        "the record id, `by`, `at` and the reason",
+    ):
+        assert needle in flat, needle
+    assert "factory decide" in SKILL
+    assert "an `accepted` dismissal decision record" in flat  # the Never section
+    assert "proposes dismissals for the human to approve" not in SKILL
+
+
+def test_policy_gates_dismissals_on_an_accepted_record():
+    flat = " ".join(POLICY.split())
+    for needle in (
+        "`dismissal` decision record in `docs/decisions/`",
+        "factory decision new --type dismissal",
+        "a dismissal is never delegated to an agent",
+        "only when the record is `accepted`",
+        "`factory verify` fails an accepted record without them",
+        "No accepted record, no call.",
+        "dismissed under an `accepted` dismissal record cited on the issue",
+    ):
+        assert needle in flat, needle
+    assert "The human says yes in words" not in POLICY

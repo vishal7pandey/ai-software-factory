@@ -2,7 +2,7 @@ id: FACT-46
 type: feature
 title: Owner decisions gate
 slug: owner-decisions-gate
-status: plan-approved
+status: implementing
 risk: medium
 jira: FACT-46
 branch: feature/fact-46-owner-decisions-gate

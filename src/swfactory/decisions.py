@@ -1,7 +1,7 @@
 """Owner decisions as a first-class gate (docs/ARCHITECTURE.md section 3.11, FACT-46).
 
 A decision record is `docs/decisions/D-<n>-<slug>.md`: Markdown with YAML front matter. The pure
-validator lives in `verify.py` (it must stay standalone: CI runs it in projects without `swfactory`);
+validator lives in `verify.py` (it must stay standalone: CI runs it where `swfactory` is absent);
 this module reads records, lists the ones waiting for the owner, and answers them (`decide`).
 
 `decide` is a ledger like `approve`: it stamps who and when and never runs on its own. Everything
@@ -156,9 +156,7 @@ def _cells(rec: Record, today: date) -> tuple[str, str, str, str, str]:
 
 def _rows(cells: list[tuple[str, str, str, str, str]]) -> list[str]:
     widths = [max(len(c[i]) for c in cells) for i in range(4)]
-    return [
-        "  ".join(c[i].ljust(widths[i]) for i in range(4)) + "  " + c[4] for c in cells
-    ]
+    return ["  ".join(c[i].ljust(widths[i]) for i in range(4)) + "  " + c[4] for c in cells]
 
 
 def inbox_lines(records: list[Record], today: date) -> list[str]:
@@ -181,7 +179,8 @@ def cmd_inbox(today: date | None = None) -> int:
     """Waiting records of every registered project that has a local path. Read-only."""
     projects = installer.registry_projects()
     if projects is None:
-        print(f"inbox: no registry yet (`factory adopt` creates it; location: {common.registry_path()})")
+        where = common.registry_path()
+        print(f"inbox: no registry yet (`factory adopt` creates it; location: {where})")
         return 0
     today = today or today_date()
     per_project: list[tuple[str, list[Record]]] = []
@@ -310,7 +309,9 @@ def cmd_decide(
     )
     verb = "Accept" if accept else "Reject"
     shown = f" with '{common.ascii_line(chosen, TEXT_MAX)}'" if chosen else ""
-    if not _confirm(f"{verb} {rec.id} '{common.ascii_line(rec.title, TEXT_MAX)}'{shown} as {who}? [y/N] ", yes):
+    if not _confirm(
+        f"{verb} {rec.id} '{common.ascii_line(rec.title, TEXT_MAX)}'{shown} as {who}? [y/N] ", yes
+    ):
         return 1
     meta = dict(rec.meta)
     meta.update(
@@ -324,7 +325,9 @@ def cmd_decide(
         meta["note"] = note.strip()
     meta.update(extra)
     rec.path.write_text(render_record(meta, rec.body), encoding="utf-8", newline="\n")
-    print(f"{rec.id}: {meta['status']} by {who} on {meta['at']}" + (f" ({chosen})" if chosen else ""))
+    print(
+        f"{rec.id}: {meta['status']} by {who} on {meta['at']}" + (f" ({chosen})" if chosen else "")
+    )
     return 0
 
 

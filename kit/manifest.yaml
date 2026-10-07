@@ -22,6 +22,8 @@ files:
   - {src: kit/workflows/factory-verify.yml, dest: .github/workflows/factory-verify.yml, mode: managed}
   - {src: src/swfactory/verify.py,          dest: .factory/verify.py,                   mode: managed}
   - {src: kit/work-README.md,               dest: docs/work/README.md,                  mode: create}
+  # Owner decisions (FACT-46): an example record to copy; never overwritten, not a record itself.
+  - {src: kit/decisions/TEMPLATE.md,        dest: docs/decisions/TEMPLATE.md,           mode: create}
 
 # Directories copied file-by-file, each file `managed`.
 dirs:
@@ -38,6 +40,10 @@ work_templates:   # resolved via the factory root by the CLI; in a project they 
   bug_spec:     kit/work/spec.bug.md
   plan:         kit/work/plan.md
   test_plan:    kit/work/test-plan.md
+
+# Templates the CLI reads from the factory root (`factory decision new`, FACT-46).
+templates:
+  decision: kit/decisions/TEMPLATE.md
 
 # Per-ecosystem entries of `.github/dependabot.yml` (FACT-39). `{{updates}}` in the file above is replaced by one
 # rendered entry per ecosystem found in the project; `{{directory}}` and `{{ecosystem}}` are filled per entry.

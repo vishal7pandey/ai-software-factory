@@ -12,8 +12,8 @@ results), Dependabot, secret scanning, and SonarQube where a project exists. The
   closed by a new analysis. A merged PR, a green build or "the code looks fixed" is not confirmation: the scanner
   has to say it.
 * A grouped issue goes to Done only when all of its alerts are settled: every alert re-queried as `fixed`
-  (secrets: revoked), or dismissed with a human approval recorded on the issue. One alert still `open`, or
-  `dismissed` without a recorded approval, anywhere in the group blocks Done.
+  (secrets: revoked), or dismissed under an `accepted` dismissal record cited on the issue. One alert still `open`, or
+  `dismissed` without an accepted record, anywhere in the group blocks Done.
 * A secret-scanning alert has no `fixed` state. It is closed only when a human confirms the secret was revoked
   (rotated) and the alert is `resolved` with resolution `revoked`. Removing it from the code does not close it.
 * An alert that is still `open` never allows Done, whatever else is true. Cite the re-queried state in the
@@ -45,9 +45,13 @@ Grouping is the default: one Jira issue is the unit of work, and one upgrade or 
 
 ## Dismissal gate
 
-* A dismissal (false positive, won't fix, used in tests) is a security exception. The agent only **proposes** it:
-  alert URL, the reason below, and a sentence of evidence. The human says yes in words; only then does the agent
-  apply it, and records the reason, the approver and the date on the Jira issue.
+* A dismissal (false positive, won't fix, used in tests) is a security exception. The agent only **proposes** it,
+  as a `dismissal` decision record in `docs/decisions/` (`factory decision new --type dismissal`): the alert URL,
+  the reason below, a sentence of evidence, the dismissal as the recommended option. The owner answers with
+  `factory decide`; an agent never runs it, and a dismissal is never delegated to an agent. The agent applies the
+  dismissal **only when the record is `accepted`** (`status: accepted`, with `by` and `at`; `factory verify` fails
+  an accepted record without them) and then records the record id, the reason, the approver and the date on the
+  Jira issue. A `rejected` record means the finding is fixed instead. No accepted record, no call.
 * Allowed reasons, exactly these three: `false positive`, `won't fix`, `used in tests`. Anything else is a
   fix, or a question for the human. Apply them with the nearest value the API accepts:
 

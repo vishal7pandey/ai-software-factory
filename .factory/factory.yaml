@@ -13,18 +13,18 @@ environments:
   prod: null
 managed:
   .claude/skills/factory-dependencies/SKILL.md: 33f00d999ab9dc039fd782816c0e4d219787a7f0b4783283b2952310949c8d5c
-  .claude/skills/factory-diagnose/SKILL.md: 1d92fede43520c4a7fd11459d7b7ac1659fd30601bec7d99084e427a48c64c2b
-  .claude/skills/factory-findings/SKILL.md: 89efa60d14ce7c175cd28c717aa0a3771ff0de998692866f5ea995586e8e7639
+  .claude/skills/factory-diagnose/SKILL.md: ba371eae80a0e7d3f1880f326ec18f4bcf21a804b1de5abb7a8018c4bf751985
+  .claude/skills/factory-findings/SKILL.md: 5ba4c178663949251669bfad374b035c84424ce55055587362223470d56f6e86
   .claude/skills/factory-implement/SKILL.md: a7318d7635d8ba7043c6d4f8aa166ec43b65e0e5d936e4efae5c493c1f8f0b9c
-  .claude/skills/factory-plan/SKILL.md: b29284ca1c6cf32eaf54e70fff339c294abf8be882abb6ef8dd331430d0d220e
+  .claude/skills/factory-plan/SKILL.md: 3142880ff33d0cb35da22d2b6fe9cace29bdf5845bc5bf2da85c306c704e52fa
   .claude/skills/factory-release/SKILL.md: 0c9bc93db58638bf98c418b08517e5051a634fbb9935466306a2c47a5bc94441
   .claude/skills/factory-review/SKILL.md: 176eae31801a237573bacc892b5db6281a80f2d0087cc8ad2753728a9a099007
-  .claude/skills/factory-spec/SKILL.md: bd18a00c71860132dffcb8a381704af85f54f2f273ed9cbf7f9d99dc3063c96a
+  .claude/skills/factory-spec/SKILL.md: 0473eada2c3c507a199c749f6f4c77a92fd59d69eab123d4f427ea6d2be57047
   .claude/skills/factory-test/SKILL.md: 4baef71d3c649a9292a6e368b3f871e522858a98f805d74bc04d952d563c47a1
-  .claude/skills/factory-workflow/SKILL.md: 969ec3fe14726d441fa5a9b57c1e209669ec41212f6519974e56fbb2b4002494
-  .factory/policies/autonomy.md: 4da550946277e90a771727d4f370a9abf448e747b632a0b916bc5ee87d72127c
+  .claude/skills/factory-workflow/SKILL.md: ccecccdd374234f26bd390c2525124c451d23fa02bff1dcef7bb5f84abba6802
+  .factory/policies/autonomy.md: 8d44cec8a49cb9243e73e932115c893ff53a2e7e08429cbb0819776f18ab911c
   .factory/policies/dependencies.md: b640d39490a4fa46cec52da149148e83d3d3db7aed57697b1eda36eafe888be6
-  .factory/policies/findings.md: 3064d8f7ca1f97b5a883ae2ead24b6678c6c61beae87edfc712d7c5e7726fffa
+  .factory/policies/findings.md: 9ca13e530de318d3b4e8d866add0e473385432c8b41419466cc08977ca44d4d7
   .factory/policies/git.md: 6d03d37a0c6587e0bb023bd6c45834eca1a5779d829c32befce4b3327d0f56e3
   .factory/policies/production.md: c7a8ed7eb37f06d81c0f08e73bd7def1e103274b7b731bcdddeb945b2a380f08
   .factory/policies/security.md: 86de4ff35aff284a88e05f4e2d39ddb1f5697eac8dcbb01d26ead40a7a27c07d
@@ -33,16 +33,16 @@ managed:
   .factory/templates/work/spec.bug.md: 3fb67e255b545219614092c973e6d7caa73b493760bf7cf6dfa8931276ea8bdd
   .factory/templates/work/spec.feature.md: f6b256a029fda98ce830d5a5a24b6ce8767aa84bcc2e33496313ea4bca71477a
   .factory/templates/work/test-plan.md: 102ca55a8c89241b36c27024744c46bbe3d4cbe5b0420ef8c2b83649b5a65713
-  .factory/verify.py: 14726c5b5ee9792a00fd3f65fa3e0384ddf83d96964d738ec99b368e0c68e7c4
+  .factory/verify.py: 5a355acf05b9f0344a7c37ded55e16688e9940cdd8387085af8bd8d744c50885
   .github/skills/factory-dependencies/SKILL.md: 33f00d999ab9dc039fd782816c0e4d219787a7f0b4783283b2952310949c8d5c
-  .github/skills/factory-diagnose/SKILL.md: 1d92fede43520c4a7fd11459d7b7ac1659fd30601bec7d99084e427a48c64c2b
-  .github/skills/factory-findings/SKILL.md: 89efa60d14ce7c175cd28c717aa0a3771ff0de998692866f5ea995586e8e7639
+  .github/skills/factory-diagnose/SKILL.md: ba371eae80a0e7d3f1880f326ec18f4bcf21a804b1de5abb7a8018c4bf751985
+  .github/skills/factory-findings/SKILL.md: 5ba4c178663949251669bfad374b035c84424ce55055587362223470d56f6e86
   .github/skills/factory-implement/SKILL.md: a7318d7635d8ba7043c6d4f8aa166ec43b65e0e5d936e4efae5c493c1f8f0b9c
-  .github/skills/factory-plan/SKILL.md: b29284ca1c6cf32eaf54e70fff339c294abf8be882abb6ef8dd331430d0d220e
+  .github/skills/factory-plan/SKILL.md: 3142880ff33d0cb35da22d2b6fe9cace29bdf5845bc5bf2da85c306c704e52fa
   .github/skills/factory-release/SKILL.md: 0c9bc93db58638bf98c418b08517e5051a634fbb9935466306a2c47a5bc94441
   .github/skills/factory-review/SKILL.md: 176eae31801a237573bacc892b5db6281a80f2d0087cc8ad2753728a9a099007
-  .github/skills/factory-spec/SKILL.md: bd18a00c71860132dffcb8a381704af85f54f2f273ed9cbf7f9d99dc3063c96a
+  .github/skills/factory-spec/SKILL.md: 0473eada2c3c507a199c749f6f4c77a92fd59d69eab123d4f427ea6d2be57047
   .github/skills/factory-test/SKILL.md: 4baef71d3c649a9292a6e368b3f871e522858a98f805d74bc04d952d563c47a1
-  .github/skills/factory-workflow/SKILL.md: 969ec3fe14726d441fa5a9b57c1e209669ec41212f6519974e56fbb2b4002494
+  .github/skills/factory-workflow/SKILL.md: ccecccdd374234f26bd390c2525124c451d23fa02bff1dcef7bb5f84abba6802
   .github/workflows/factory-verify.yml: c8262b3fd47ff858422caab9d17c7e9b83a866532ccef44464bc0b6ed8bb3d59
-  AGENTS.md#block: e71080f8ea926e049d9179054d56046c4b5330f8c64f7c1443920a6d437a369a
+  AGENTS.md#block: 67941c7b16ab23d80279e53a24f54fd78b1026a4ca52cd58e6ed2a86d68c7ccc

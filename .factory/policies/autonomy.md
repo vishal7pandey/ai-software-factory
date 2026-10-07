@@ -27,6 +27,7 @@ Mode is set in `.factory/factory.yaml › autonomy`.
 ## NEVER
 
 * Run `factory approve`, or write `approvals:` entries in `item.yaml`, unless the owner has delegated that gate to you (see Delegated approval). Never record an approval under a human's own name.
+* Run `factory decide`, or write `status`, `decision`, `by` or `at` into a decision record yourself: answering a decision is the owner's act (see Owner decisions). Never record a decision under a human's own name.
 * Merge your own PR, or any PR except a Dependabot PR that meets every condition of `dependencies.md` (the one standing exception; the conditions are conjunctive, a major or a failing check never qualifies).
 * Push to `main`; force-push a shared branch.
 * Deploy to production without a fresh, explicit human go-ahead in the current conversation.
@@ -47,6 +48,21 @@ The owner may delegate the spec or plan approval to an agent. It is valid only w
 
 `factory status` marks items with a delegated approval, and `verify` accepts the form. Delegation does not replace review:
 the PR and its checks still stand.
+
+## Owner decisions
+
+A choice that belongs to the owner (a design direction, a scanner-finding dismissal, a project charter) is not asked
+only in chat: the agent opens a decision record in `docs/decisions/` (`factory decision new`), recommends one option and
+stops. `factory status`, `factory doctor` and `factory inbox` list what waits. The owner answers with
+`factory decide`; an agent never runs it on its own. The agent acts on the answer only when the record is `accepted`
+with `by` and `at` (`factory verify` fails one without them).
+
+* `charter` and `dismissal` decisions are never delegated to an agent, even on request: `decide --delegated` refuses
+  them and `verify` fails a record that says otherwise.
+* A `design` or `other` decision may be delegated only by an explicit owner instruction recorded where others can read
+  it, naming that decision; the form is `factory decide <id> --accept --delegated "<owner name>"` (`by: "<owner name>
+  (delegated to agent)"`, `delegated: true`). An agent never infers it.
+* Like `approve`, `decide` is a ledger, not a lock: GitHub review on `docs/decisions/` is the lock.
 
 ## Supervised vs trusted
 

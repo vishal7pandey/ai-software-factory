@@ -478,6 +478,19 @@ def _load_registry() -> dict:
     return data
 
 
+def registry_projects() -> dict[str, str | None] | None:
+    """name -> local checkout path (None when none is registered) for every registered project,
+    or None when there is no registry file yet. Read-only."""
+    if not common.registry_path().is_file():
+        return None
+    reg = _load_registry()
+    out: dict[str, str | None] = {
+        str(p.get("name")): None for p in reg["projects"] if isinstance(p, dict) and p.get("name")
+    }
+    out.update({str(k): str(v) for k, v in reg["paths"].items()})
+    return out
+
+
 def _save_registry(data: dict) -> None:
     p = common.registry_path()
     header: list[str] = []

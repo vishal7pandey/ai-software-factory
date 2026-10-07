@@ -32,7 +32,7 @@ description: Use when a defect must be investigated before it is fixed - a bug r
    - Since when, and who is affected (from `git blame` date, release history).
 7. **Write `spec.md`** from `.factory/templates/work/spec.bug.md`, replacing every placeholder: Repro (steps plus the automated repro path and command), Expected, Actual, Root cause with `file:line` evidence, Blast radius, Regression criterion, Fix constraints, Risks. Set the Risk in the header consistent with `item.yaml › risk` (raise it if blast radius or data impact warrants; edit `item.yaml` by hand).
 8. **Regression criterion = AC1.** AC1 names the failing test from step 4 that must pass after the fix and fails on current code. Add AC2+ only for neighbouring behaviour found in blast radius that the fix must also cover or preserve. Each AC must be testable as written (factory-test will check).
-9. **Open questions.** Anything only a human can answer: leave the NEEDS CLARIFICATION marker (square brackets, see factory-spec) next to it. Remove every marker once answered; approval is blocked while one remains.
+9. **Open questions.** Anything only a human can answer: leave the NEEDS CLARIFICATION marker (square brackets, see factory-spec) next to it. Remove every marker once answered; approval is blocked while one remains. A choice that belongs to the owner (accept a risk, fix now or park it) is a decision record in `docs/decisions/` (`factory decision new "<title>" --type design|other --jira <KEY>`), not a question left only in chat; never run `factory decide`.
 10. **Hand off.** Commit nothing that changes behaviour in this phase except the repro test (it is expected to fail until the fix). Ask the human to review and approve `spec.md`. Then the flow continues at factory-plan.
 
 ## Output

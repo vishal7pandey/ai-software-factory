@@ -354,7 +354,7 @@ def split_front_matter(text: str) -> tuple[dict, str]:
 
 
 def load_decision(path: Path | str) -> tuple[dict, str]:
-    """Read a decision record: (front matter, body). ValueError when it has no valid front matter."""
+    """Read a decision record: (front matter, body). ValueError without valid front matter."""
     return split_front_matter(Path(path).read_text(encoding="utf-8-sig"))
 
 
@@ -466,7 +466,12 @@ def _decision_type_fields(meta: dict) -> list[str]:
     subject = meta.get("subject")
     if subject is not None:
         parts = str(subject).replace("\\", "/").split("/")
-        if not _text(subject) or parts[0] == "" or ".." in parts or re.match(r"^[A-Za-z]:", parts[0]):
+        if (
+            not _text(subject)
+            or parts[0] == ""
+            or ".." in parts
+            or re.match(r"^[A-Za-z]:", parts[0])
+        ):
             problems.append("subject must be a path inside the project (no '..', not absolute)")
         elif meta.get("status") == "accepted" and not _SHA_RE.match(
             str(meta.get("subject_sha256") or "")

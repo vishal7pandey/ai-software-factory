@@ -1,5 +1,5 @@
 """Owner decisions as a first-class gate (FACT-46): records, `decide`, `decision new`, the waiting
-block in `status` and `doctor`, `inbox`, the verify rule, and the text that routes agents to records.
+block in `status` and `doctor`, `inbox`, the verify rule, and the text that routes agents to them.
 
 Three kinds of test: pure validator tests; command tests in a scratch adopted project (no network,
 `today` pinned); contract tests that read the real kit, skills, policies and Treaty.
@@ -83,7 +83,8 @@ def put(project: Path, n: int = 1, slug: str = "pick-a-cache", body: str = BODY,
 
 
 def accepted(n: int = 1, **over) -> dict:
-    return meta(n, status="accepted", decision="Use redis", by="Test Owner", at="2026-10-05", **over)
+    base = {"status": "accepted", "decision": "Use redis", "by": "Test Owner", "at": "2026-10-05"}
+    return meta(n, **{**base, **over})
 
 
 # --- the pure validator (AC4) --------------------------------------------------------------
@@ -119,31 +120,81 @@ BAD = [
     ("rejected without by", meta(status="rejected", at="2026-10-05"), "'by' is missing"),
     ("proposed already answered", meta(decision="Use redis"), "status is proposed but 'decision'"),
     ("proposed with by", meta(by="Test Owner"), "status is proposed but 'by' is set"),
-    ("rejected with a decision", meta(status="rejected", by="x", at="2026-10-05", decision="Use redis"), "status is rejected but 'decision'"),
+    (
+        "rejected with a decision",
+        meta(status="rejected", by="x", at="2026-10-05", decision="Use redis"),
+        "status is rejected but 'decision'",
+    ),
     ("no options", meta(options=[]), "options must be a non-empty list"),
     ("option without text", meta(options=[{"recommended": True}]), "options[1] must be a mapping"),
-    ("two recommended", meta(options=[{"text": "a", "recommended": True}, {"text": "b", "recommended": True}]), "at most one"),
+    (
+        "two recommended",
+        meta(options=[{"text": "a", "recommended": True}, {"text": "b", "recommended": True}]),
+        "at most one",
+    ),
     ("none recommended", meta(options=[{"text": "a"}, {"text": "b"}]), "needs one recommended"),
-    ("recommended not boolean", meta(options=[{"text": "a", "recommended": "yes"}]), "must be true or false"),
-    ("duplicate option texts", meta(options=[{"text": "a", "recommended": True}, {"text": "a"}]), "must be distinct"),
+    (
+        "recommended not boolean",
+        meta(options=[{"text": "a", "recommended": "yes"}]),
+        "must be true or false",
+    ),
+    (
+        "duplicate option texts",
+        meta(options=[{"text": "a", "recommended": True}, {"text": "a"}]),
+        "must be distinct",
+    ),
     ("id does not match the file", meta(id="D-009"), "does not match file name"),
     ("id not D-n", meta(id="X-1"), "is not D-<number>"),
     ("bad status", meta(status="maybe"), "status 'maybe' is not one of"),
     ("bad type", meta(type="wish"), "type 'wish' is not one of"),
     ("no title", meta(title=""), "missing required field 'title'"),
     ("no proposed_by", meta(proposed_by=None), "missing required field 'proposed_by'"),
-    ("bad proposed_at", meta(proposed_at="yesterday"), "proposed_at 'yesterday' is not an ISO date"),
+    (
+        "bad proposed_at",
+        meta(proposed_at="yesterday"),
+        "proposed_at 'yesterday' is not an ISO date",
+    ),
     ("bad jira", meta(jira="fact 1"), "is not a Jira key or null"),
     ("delegated not boolean", accepted(delegated="yes"), "delegated must be true or false"),
-    ("delegated without the wording", accepted(delegated=True), "does not end with ' (delegated to agent)'"),
-    ("delegated charter", accepted(type="charter", delegated=True, by="V (delegated to agent)"), "charter decision is never delegated"),
-    ("delegated by wording on a dismissal", accepted(type="dismissal", alert="https://x/1", reason="won't fix", by="V (delegated to agent)"), "dismissal decision is never delegated"),
+    (
+        "delegated without the wording",
+        accepted(delegated=True),
+        "does not end with ' (delegated to agent)'",
+    ),
+    (
+        "delegated charter",
+        accepted(type="charter", delegated=True, by="V (delegated to agent)"),
+        "charter decision is never delegated",
+    ),
+    (
+        "delegated by wording on a dismissal",
+        accepted(
+            type="dismissal", alert="https://x/1", reason="won't fix", by="V (delegated to agent)"
+        ),
+        "dismissal decision is never delegated",
+    ),
     ("dismissal without alert", meta(type="dismissal", reason="won't fix"), "needs 'alert'"),
-    ("dismissal with a bad reason", meta(type="dismissal", alert="https://x/1", reason="too hard"), "needs 'reason'"),
-    ("accepted subject without sha", accepted(subject="docs/PROJECT.md"), "'subject_sha256' is not a sha256"),
-    ("subject outside the project", meta(subject="../x.md"), "subject must be a path inside the project"),
+    (
+        "dismissal with a bad reason",
+        meta(type="dismissal", alert="https://x/1", reason="too hard"),
+        "needs 'reason'",
+    ),
+    (
+        "accepted subject without sha",
+        accepted(subject="docs/PROJECT.md"),
+        "'subject_sha256' is not a sha256",
+    ),
+    (
+        "subject outside the project",
+        meta(subject="../x.md"),
+        "subject must be a path inside the project",
+    ),
     ("absolute subject", meta(subject="/etc/passwd"), "subject must be a path inside the project"),
-    ("superseded without pointer", meta(status="superseded"), "'superseded_by' is not a D-<number>"),
+    (
+        "superseded without pointer",
+        meta(status="superseded"),
+        "'superseded_by' is not a D-<number>",
+    ),
 ]
 
 
@@ -260,9 +311,14 @@ def test_decide_accepts_by_file_stem(project):
 @pytest.mark.parametrize("status", ["accepted", "rejected", "superseded"])
 def test_decide_refuses_a_record_that_is_not_proposed(project, status):
     extra = {"superseded_by": "D-002"} if status == "superseded" else {}
-    path = put(project, status=status, decision="Use redis" if status == "accepted" else None,
-               by="Someone" if status != "superseded" else None,
-               at="2026-10-05" if status != "superseded" else None, **extra)
+    path = put(
+        project,
+        status=status,
+        decision="Use redis" if status == "accepted" else None,
+        by="Someone" if status != "superseded" else None,
+        at="2026-10-05" if status != "superseded" else None,
+        **extra,
+    )
     before = path.read_bytes()
     with pytest.raises(FactoryError, match=f"already {status}"):
         run("decide", "D-001", "--accept", "--yes")
@@ -313,14 +369,18 @@ def test_decide_unknown_and_ambiguous_ids(project):
     with pytest.raises(FactoryError, match="no decision record 'D-009'"):
         run("decide", "D-009", "--accept", "--yes")
     put(project, 1, slug="a")
-    (project / "docs" / "decisions" / "D-001-b.md").write_text(record_text(meta(1)), encoding="utf-8")
+    (project / "docs" / "decisions" / "D-001-b.md").write_text(
+        record_text(meta(1)), encoding="utf-8"
+    )
     with pytest.raises(FactoryError, match="ambiguous"):
         run("decide", "D-001", "--accept", "--yes")
 
 
 def test_decide_stamps_the_subject_hash(project):
     (project / "docs").mkdir(exist_ok=True)
-    (project / "docs" / "PROJECT.md").write_text("charter\r\ntext\r\n", encoding="utf-8", newline="")
+    (project / "docs" / "PROJECT.md").write_text(
+        "charter\r\ntext\r\n", encoding="utf-8", newline=""
+    )
     path = put(project, subject="docs/PROJECT.md")
     assert run("decide", "D-001", "--accept", "--yes") == 0
     m, _ = verify.load_decision(path)
@@ -386,7 +446,7 @@ def test_delegated_is_refused_for_never_delegated_types(project, dtype):
     extra = {"alert": "https://x/1", "reason": "won't fix"} if dtype == "dismissal" else {}
     path = put(project, type=dtype, **extra)
     before = path.read_bytes()
-    with pytest.raises(FactoryError, match=f"never delegated to an agent"):
+    with pytest.raises(FactoryError, match="never delegated to an agent"):
         run("decide", "D-001", "--accept", "--delegated", "The Owner", "--yes")
     assert path.read_bytes() == before
 
@@ -416,7 +476,9 @@ def test_read_only_commands_never_decide(project, tmp_path, monkeypatch, capsys)
     put(project, 2, slug="other", type="other")
     (project / ".factory" / "templates" / "work").mkdir(parents=True)
     reg = tmp_path / "reg.yaml"
-    reg.write_text(yaml.safe_dump({"projects": [{"name": "proj"}], "paths": {"proj": str(project)}}))
+    reg.write_text(
+        yaml.safe_dump({"projects": [{"name": "proj"}], "paths": {"proj": str(project)}})
+    )
     monkeypatch.setenv("FACTORY_REGISTRY", str(reg))
     before = snapshot_records(project)
     run("status")
@@ -474,8 +536,22 @@ def test_new_record_becomes_decidable_once_written(project):
 
 def test_new_dismissal_carries_alert_reason_and_options(project):
     url = "https://github.com/o/r/security/code-scanning/52"
-    assert run("decision", "new", "Dismiss alert 52", "--type", "dismissal", "--jira", "CPID-41",
-               "--alert", url, "--reason", "used in tests") == 0
+    assert (
+        run(
+            "decision",
+            "new",
+            "Dismiss alert 52",
+            "--type",
+            "dismissal",
+            "--jira",
+            "CPID-41",
+            "--alert",
+            url,
+            "--reason",
+            "used in tests",
+        )
+        == 0
+    )
     path = project / "docs" / "decisions" / "D-001-dismiss-alert-52.md"
     m, _ = verify.load_decision(path)
     assert (m["alert"], m["reason"]) == (url, "used in tests")
@@ -513,7 +589,9 @@ def test_a_broken_record_still_reserves_its_id(project):
     keep = folder / "D-004-broken.md"
     keep.write_text("not a record\n", encoding="utf-8")
     run("decision", "new", "Next", "--type", "other")
-    assert (folder / "D-005-next.md").is_file() and keep.read_text(encoding="utf-8") == "not a record\n"
+    assert (folder / "D-005-next.md").is_file() and keep.read_text(
+        encoding="utf-8"
+    ) == "not a record\n"
 
 
 # --- status, doctor (AC2) ------------------------------------------------------------------
@@ -603,7 +681,11 @@ def test_inbox_aggregates_registered_projects(tmp_path, monkeypatch, capsys):
     put(alpha, 1, slug="one", title="Alpha choice")
     put(alpha, 3, slug="three", title="Alpha later", proposed_at="2026-10-07")
     put(alpha, 4, slug="four", status="accepted", decision="Use redis", by="O", at="2026-10-05")
-    registry(tmp_path, monkeypatch, {"beta": beta, "alpha": alpha, "gamma": None, "delta": tmp_path / "gone"})
+    registry(
+        tmp_path,
+        monkeypatch,
+        {"beta": beta, "alpha": alpha, "gamma": None, "delta": tmp_path / "gone"},
+    )
     snap = {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
     assert decisions.cmd_inbox() == 0
     assert capsys.readouterr().out.splitlines() == [
@@ -632,7 +714,9 @@ def test_inbox_nothing_waiting_and_no_registry(tmp_path, monkeypatch, capsys):
 def test_inbox_skips_unreadable_records_without_failing(tmp_path, monkeypatch, capsys):
     alpha = tmp_path / "alpha"
     put(alpha, 1)
-    (alpha / "docs" / "decisions" / "D-002-bad.md").write_text("no front matter\n", encoding="utf-8")
+    (alpha / "docs" / "decisions" / "D-002-bad.md").write_text(
+        "no front matter\n", encoding="utf-8"
+    )
     registry(tmp_path, monkeypatch, {"alpha": alpha})
     assert run("inbox") == 0
     out = capsys.readouterr().out
@@ -640,10 +724,10 @@ def test_inbox_skips_unreadable_records_without_failing(tmp_path, monkeypatch, c
     assert "invalid: alpha D-002" in out
 
 
-def test_registry_paths_helper(tmp_path, monkeypatch):
-    assert installer.registry_paths() is None
-    registry(tmp_path, monkeypatch, {"a": tmp_path})
-    assert installer.registry_paths() == {"a": str(tmp_path)}
+def test_registry_projects_helper(tmp_path, monkeypatch):
+    assert installer.registry_projects() is None
+    registry(tmp_path, monkeypatch, {"a": tmp_path, "b": None})
+    assert installer.registry_projects() == {"a": str(tmp_path), "b": None}
 
 
 # --- kit, template, lint (AC8) -------------------------------------------------------------
@@ -669,7 +753,10 @@ def test_adopt_creates_the_template_and_sync_never_touches_it(tmp_path, capsys):
     assert cli.main(["adopt", str(proj)]) == 0
     tpl = proj / "docs" / "decisions" / "TEMPLATE.md"
     assert tpl.is_file()
-    assert "docs/decisions/TEMPLATE.md" not in common.load_yaml(proj / ".factory" / "factory.yaml")["managed"]
+    assert (
+        "docs/decisions/TEMPLATE.md"
+        not in common.load_yaml(proj / ".factory" / "factory.yaml")["managed"]
+    )
     tpl.write_text("my own template\n", encoding="utf-8")
     assert cli.main(["sync", str(proj)]) == 0
     assert tpl.read_text(encoding="utf-8") == "my own template\n"
@@ -705,7 +792,9 @@ def test_every_real_skill_passes_lint_including_the_decide_rule():
     assert checks.failures(checks.lint_skills(ROOT)) == []
 
 
-@pytest.mark.parametrize("skill", ["factory-spec", "factory-plan", "factory-diagnose", "factory-workflow"])
+@pytest.mark.parametrize(
+    "skill", ["factory-spec", "factory-plan", "factory-diagnose", "factory-workflow"]
+)
 def test_skills_send_owner_choices_to_a_decision_record(skill):
     text = read(ROOT / "skills" / skill / "SKILL.md")
     assert "docs/decisions" in text and "decision record" in text
@@ -718,7 +807,9 @@ def test_autonomy_policy_and_agents_block_forbid_deciding():
     block = read(ROOT / "kit" / "AGENTS.block.md")
     for text in (autonomy, block):
         assert "factory decide" in text and "never" in text.lower()
-    assert "charter" in autonomy and "dismissal" in autonomy and "never delegated" in autonomy.lower()
+    assert (
+        "charter" in autonomy and "dismissal" in autonomy and "never delegated" in autonomy.lower()
+    )
     assert "decision record" in block and "docs/decisions" in block
 
 
@@ -735,3 +826,17 @@ def test_treaty_documents_the_gate():
         "never run by an agent",
     ):
         assert needle in arch, needle
+
+
+def test_a_record_symlinked_out_of_the_folder_is_skipped(project, tmp_path):
+    outside = tmp_path / "outside.md"
+    outside.write_text(record_text(meta(1)), encoding="utf-8")
+    folder = project / "docs" / "decisions"
+    folder.mkdir(parents=True)
+    try:
+        (folder / "D-001-evil.md").symlink_to(outside)
+    except (OSError, NotImplementedError):
+        pytest.skip("no symlink rights on this machine")
+    assert decisions.load_records(project) == []
+    with pytest.raises(FactoryError, match="no decision record"):
+        run("decide", "D-001", "--accept", "--yes")
