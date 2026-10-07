@@ -25,6 +25,7 @@ from swfactory import dependabot as _dependabot
 from swfactory import deps as _deps
 from swfactory import harden as _harden
 from swfactory import installer as _installer
+from swfactory import support as _support
 from swfactory.common import FactoryError
 
 OK, WARN, FAIL = "OK", "WARN", "FAIL"
@@ -316,9 +317,17 @@ def lint_generic(root: Path) -> list[Finding]:
     return out
 
 
+def lint_support(root: Path) -> list[Finding]:
+    """The supported-today matrix (FACT-48). Only a factory repository has one: a root without
+    docs/ARCHITECTURE.md (the Treaty) is not checked."""
+    if not (root / "docs" / "ARCHITECTURE.md").is_file():
+        return []
+    return [Finding(FAIL, _support.SUPPORT_REL, p) for p in _support.check_support(root)]
+
+
 def lint_factory(root: Path) -> list[Finding]:
     root = Path(root)
-    return lint_skills(root) + lint_manifest(root) + lint_generic(root)
+    return lint_skills(root) + lint_manifest(root) + lint_generic(root) + lint_support(root)
 
 
 def format_lint(findings: list[Finding]) -> list[str]:
