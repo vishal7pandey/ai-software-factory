@@ -48,17 +48,17 @@ jobs:
         if: steps.guard.outputs.enabled == 'true'
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         if: steps.guard.outputs.enabled == 'true'
       - name: Install dependencies
         if: steps.guard.outputs.enabled == 'true'
-        run: uv sync --all-extras --all-groups
+        run: uv sync --locked --all-extras --all-groups
       - name: Tests with coverage (the factory's own test command, coverage of src/swfactory)
         if: steps.guard.outputs.enabled == 'true'
         run: uv run --locked --no-sync python -m pytest -q --cov=src/swfactory --cov-branch --cov-report=xml:coverage.xml
       - name: SonarCloud scan
         if: steps.guard.outputs.enabled == 'true'
-        uses: SonarSource/sonarqube-scan-action@v8
+        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
