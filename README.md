@@ -31,6 +31,7 @@ the current state (spec → plan → test plan → implement → review → rele
 ## Where to read next
 
 * [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — principles and the contracts (the "Treaty")
+* [docs/SUPPORT.md](docs/SUPPORT.md) — what is supported today (stacks, tracker, hosting, scanners, OS) and what proves it
 * [policies/dependencies.md](policies/dependencies.md) — Dependabot PRs: when an agent may merge one, the weekly routine
 * [docs/sonarcloud.md](docs/sonarcloud.md) — the optional SonarCloud scan: owner-side setup, token, local scan
 * [docs/ROADMAP.md](docs/ROADMAP.md) — what's next and what would justify building it
