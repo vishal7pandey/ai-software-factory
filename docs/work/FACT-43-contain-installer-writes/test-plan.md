@@ -46,3 +46,7 @@ restored afterwards (`git diff` shows only the intended change):
 | M5 plan-time `realpath` replaced by `abspath` | still passes: the write-time `realpath` check in `_install` catches the symlink (defence in depth, by design) |
 | M2 write-time check removed | still passes: the plan-time check catches every case first (redundant by design; a link created between plan and write is not simulated) |
 | Registry check removed (`_save_registry`) | the symlink test cannot run here; checked with a script that fakes `os.path.realpath` for the registry file: with the check the write is refused, without it the write goes to the redirected path |
+
+2026-10-07, after the refinement in the spec amendment: the template guard now lives in `_copy_template`; re-ran
+M4 (guard replaced by `if True:`): `test_new_rejects_a_template_path_that_climbs...` fails; restored. Full suite
+602 passed, 1 skipped before the refinement; the install, registry and isolation tests pass after it.

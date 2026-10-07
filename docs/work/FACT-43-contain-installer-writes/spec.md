@@ -104,3 +104,14 @@ A project that symlinks a managed directory (for example `.claude/skills`) to a 
 project is now refused by `adopt`/`sync` with "outside the project"; accepted, since that is the escape this
 guards against, and the error names the destination. Risk level low: the shipped kit passes unchanged (full
 suite).
+
+## Amendment 2026-10-07 (found on the PR scan)
+
+The first fix (containment guard that raises, then `Path.write_bytes` / `write_text`) did not clear the issues:
+the analysis of PR 19 still reported `pythonsecurity:S2083` at the three write sites (plus `python:S3776`, the
+new code made `new_project` too complex). The Sonar flows show the "source" is the file read and the sink is the
+`pathlib` write call, which a path guard does not sanitise. The shape that Sonar accepts is the guard with the
+sink inside its true branch and the write made through `open(dst, ...)` / `os.makedirs(dst)`. Refinement inside the
+same scope: writes in `_save_registry` and the template copy now use `open()` inside `if dst.startswith(root + os.sep):`
+(else `raise`), and the template copy is split out of `new_project` (`_copy_template`, `_render_template`). Behaviour
+and tests are unchanged. The PR analysis then reported no issue and CodeQL no alert.
