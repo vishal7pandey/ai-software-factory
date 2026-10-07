@@ -184,6 +184,15 @@ def test_stack_from_the_code_constant_needs_a_row(tmp_path, monkeypatch):
     assert has(problems(tmp_path), "swift", "no row")
 
 
+@pytest.mark.parametrize("path", ["templates/go/main.go", "kit/ci/go.yml", "kit/sonar/go.yml"])
+def test_not_supported_row_goes_stale_when_the_stack_arrives(tmp_path, path):
+    make_tree(tmp_path)  # its `go` row says `not supported`
+    assert problems(tmp_path) == []
+    write(tmp_path / path)
+    found = problems(tmp_path)
+    assert has(found, "go", "not supported", "exists"), found
+
+
 def test_shared_generic_stem_needs_no_row(tmp_path):
     make_tree(tmp_path, [r for r in good_rows() if "`generic`" not in r])
     assert (tmp_path / "kit" / "ci" / "generic.yml").is_file()
@@ -320,10 +329,18 @@ def test_lint_catches_a_new_stack_directory_without_a_row(tmp_path, monkeypatch,
     assert main(["lint"]) == 0, capsys.readouterr().out
     capsys.readouterr()
 
+    # swift has no row at all
+    write(tmp_path / "templates" / "swift" / "main.swift")
+    assert main(["lint"]) == 1
+    out = capsys.readouterr().out
+    assert "FAIL docs/SUPPORT.md:" in out and "swift" in out and "no row" in out
+
+    # go has a row that says `not supported`: a template for it makes that row stale
+    shutil.rmtree(tmp_path / "templates" / "swift")
     write(tmp_path / "templates" / "go" / "main.go")
     assert main(["lint"]) == 1
     out = capsys.readouterr().out
-    assert "FAIL docs/SUPPORT.md:" in out and "go" in out and "no row" in out
+    assert "FAIL docs/SUPPORT.md:" in out and "go" in out and "not supported" in out
 
 
 def test_lint_checks_the_matrix_only_in_a_factory_repository(tmp_path):

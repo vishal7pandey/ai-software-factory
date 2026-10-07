@@ -170,8 +170,13 @@ def _stack_problems(rows: list[Row], stacks: dict[str, str]) -> list[str]:
         for name, where in sorted(stacks.items())
         if name not in rowed
     ]
-    for r in rows:
-        if r.dimension == "stack" and r.status != "not supported" and r.value not in stacks:
+    for r in (r for r in rows if r.dimension == "stack"):
+        if r.status == "not supported" and r.value in stacks:
+            out.append(
+                f"{SUPPORT_REL} line {r.line}: stack '{r.value}' is marked not supported "
+                f"but it exists ({stacks[r.value]}); update the row"
+            )
+        elif r.status in ("supported", "partial") and r.value not in stacks:
             out.append(
                 f"{SUPPORT_REL} line {r.line}: stack '{r.value}' claims {r.status} but no "
                 "template, manifest entry or stack constant exists for it"

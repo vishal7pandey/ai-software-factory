@@ -46,7 +46,8 @@ frontend, developed on Windows. Without an honest, checked account, the next pro
 - R2. A pure function `check_support(root)` reads the repository and reports a finding for each of: the matrix
   file missing or without a table; a row with an unknown status, a missing cell or fewer than five cells; a required
   dimension (stack, tracker, hosting, ci, scanner, os) with no row; a stack that exists in the repository but has no
-  `stack` row; a `stack` row claiming `supported` or `partial` for a stack that does not exist; a Dependabot
+  `stack` row; a `stack` row claiming `supported` or `partial` for a stack that does not exist; a `stack` row marked `not supported`
+  for a stack that now exists (the row went stale); a Dependabot
   ecosystem template without a `dependabot ecosystem` row; the Treaty or the roadmap not linking `SUPPORT.md`.
   A stack "exists" when it is a name in `STACKS`, a `stack:` value in `kit/manifest.yaml`, a directory under
   `templates/`, or a file stem under `kit/ci/` or `kit/sonar/` (the stem `generic` is the shared placeholder of `docs`
@@ -80,8 +81,9 @@ frontend, developed on Windows. Without an honest, checked account, the next pro
   `supported` with no such stack; a `dependabot_templates` key with no `dependabot ecosystem` row; `ARCHITECTURE.md`
   without a link. Failure paths.
 - AC4. (R3) `factory lint` run against a temporary copy of the repository's factory files (kit, skills, policies,
-  templates, docs, `verify.py`) exits 1 and prints a line naming the stack when a `templates/go` directory is added,
-  and exits 0 without it. A repo root without `docs/ARCHITECTURE.md`
+  templates, docs, `verify.py`) exits 1 and prints a line naming the stack when a `templates/swift` directory (no
+  row) is added, and again when a `templates/go` directory is added (its row says `not supported`: stale), and
+  exits 0 without either. A repo root without `docs/ARCHITECTURE.md`
   (the existing lint tests' temporary roots) is not checked and still passes.
 - AC5. (R5) The Confluence page exists in space FACT with title "Factory generality: assumptions and roadmap", contains
   a ranked table (rank, gap, value, effort, smallest next step, proof) covering the seven topics of R5, and is linked
@@ -97,7 +99,7 @@ frontend, developed on Windows. Without an honest, checked account, the next pro
 ## Edge cases and failure modes
 
 - A new stack directory arrives together with its matrix row in the same PR: passes. Arrives without: lint and the
-  test fail with the stack name.
+  test fail with the stack name. Arrives for a stack whose row says `not supported`: fails until the row is updated.
 - The matrix claims `supported` for a stack whose template was removed: fails (a claim with nothing behind it).
 - `kit/ci/generic.yml` is a shared placeholder, not a stack: no row of its own is demanded; it serves `docs` and `other`.
 - A table cell containing a pipe breaks the row: the check reports the row by its number of cells.
