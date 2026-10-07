@@ -651,6 +651,25 @@ def _render_template(data: bytes, name: str, pkg: str) -> bytes:
     return text.encode("utf-8")
 
 
+def _copy_template(template: Path, root: str, name: str, pkg: str) -> None:
+    """Copy the template tree under `root` (a realpath); a path that leaves it aborts the copy."""
+    for src in sorted(template.rglob("*")):
+        rel = src.relative_to(template)
+        if "__pycache__" in rel.parts or src.suffix == ".pyc":
+            continue
+        parts = [pkg if part == "__package__" else part for part in rel.parts]
+        dst = os.path.realpath(os.path.join(root, *parts))
+        if dst.startswith(root + os.sep):
+            if src.is_dir():
+                os.makedirs(dst, exist_ok=True)
+            else:
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                with open(dst, "wb") as fh:
+                    fh.write(_render_template(src.read_bytes(), name, pkg))
+        else:
+            raise FactoryError(f"template path '{rel.as_posix()}' is outside the project {root}")
+
+
 def new_project(name: str, *, stack: str = "python", parent: str | Path | None = None) -> int:
     pkg = package_name(name)
     template = common.templates_dir() / stack
@@ -666,21 +685,7 @@ def new_project(name: str, *, stack: str = "python", parent: str | Path | None =
     if not root.startswith(os.path.realpath(base) + os.sep):
         raise FactoryError(f"project '{name}' resolves outside {base}")
 
-    for src in sorted(template.rglob("*")):
-        rel = src.relative_to(template)
-        if "__pycache__" in rel.parts or src.suffix == ".pyc":
-            continue
-        parts = [pkg if part == "__package__" else part for part in rel.parts]
-        dst = os.path.realpath(os.path.join(root, *parts))
-        if dst.startswith(root + os.sep):
-            if src.is_dir():
-                os.makedirs(dst, exist_ok=True)
-            else:
-                os.makedirs(os.path.dirname(dst), exist_ok=True)
-                with open(dst, "wb") as fh:
-                    fh.write(_render_template(src.read_bytes(), name, pkg))
-        else:
-            raise FactoryError(f"template path '{rel.as_posix()}' is outside the project {target}")
+    _copy_template(template, root, name, pkg)
     target.mkdir(parents=True, exist_ok=True)
 
     common.git("init", "-b", "main", cwd=target)
