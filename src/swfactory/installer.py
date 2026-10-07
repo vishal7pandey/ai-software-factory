@@ -492,12 +492,14 @@ def _save_registry(data: dict) -> None:
         # somewhere else would redirect the write (FACT-43).
         base = os.path.realpath(p.parent)
         dest = os.path.realpath(p)
-        if not dest.startswith(base + os.sep):
-            raise FactoryError(f"the registry {p} resolves outside its directory ({dest})")
         text = common.yaml_text(data)
         if header:  # keep the file's leading comment; PyYAML would drop it
             text = "\n".join(header) + "\n" + text
-        Path(dest).write_text(text, encoding="utf-8", newline="\n")
+        if dest.startswith(base + os.sep):
+            with open(dest, "w", encoding="utf-8", newline="\n") as fh:
+                fh.write(text)
+        else:
+            raise FactoryError(f"the registry {p} resolves outside its directory ({dest})")
     except OSError as e:
         raise FactoryError(f"cannot write the registry {p}: {e}") from e
 
@@ -639,6 +641,16 @@ def package_name(name: str) -> str:
     return pkg
 
 
+def _render_template(data: bytes, name: str, pkg: str) -> bytes:
+    """Text templates: newlines normalised, `{{name}}`/`{{package}}` filled. Binary files pass."""
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return data
+    text = common.normalise_newlines(text).replace("{{name}}", name).replace("{{package}}", pkg)
+    return text.encode("utf-8")
+
+
 def new_project(name: str, *, stack: str = "python", parent: str | Path | None = None) -> int:
     pkg = package_name(name)
     template = common.templates_dir() / stack
@@ -660,21 +672,15 @@ def new_project(name: str, *, stack: str = "python", parent: str | Path | None =
             continue
         parts = [pkg if part == "__package__" else part for part in rel.parts]
         dst = os.path.realpath(os.path.join(root, *parts))
-        if not dst.startswith(root + os.sep):
+        if dst.startswith(root + os.sep):
+            if src.is_dir():
+                os.makedirs(dst, exist_ok=True)
+            else:
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                with open(dst, "wb") as fh:
+                    fh.write(_render_template(src.read_bytes(), name, pkg))
+        else:
             raise FactoryError(f"template path '{rel.as_posix()}' is outside the project {target}")
-        if src.is_dir():
-            Path(dst).mkdir(parents=True, exist_ok=True)
-            continue
-        Path(dst).parent.mkdir(parents=True, exist_ok=True)
-        data = src.read_bytes()
-        try:
-            text = data.decode("utf-8")
-        except UnicodeDecodeError:
-            Path(dst).write_bytes(data)
-            continue
-        text = common.normalise_newlines(text)
-        text = text.replace("{{name}}", name).replace("{{package}}", pkg)
-        Path(dst).write_bytes(text.encode("utf-8"))
     target.mkdir(parents=True, exist_ok=True)
 
     common.git("init", "-b", "main", cwd=target)
