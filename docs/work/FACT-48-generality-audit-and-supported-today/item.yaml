@@ -2,7 +2,7 @@ id: FACT-48
 type: feature
 title: Generality audit and supported-today matrix
 slug: generality-audit-and-supported-today
-status: in-review
+status: merged
 risk: low
 jira: FACT-48
 branch: feature/fact-48-generality-audit-and-supported-today
@@ -16,4 +16,4 @@ approvals:
     by: Vishal Pandey (delegated to agent)
     at: '2026-10-07'
     delegated: true
-pr: null
+pr: '23'
