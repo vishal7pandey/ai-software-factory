@@ -25,6 +25,7 @@ from swfactory import dependabot as _dependabot
 from swfactory import deps as _deps
 from swfactory import harden as _harden
 from swfactory import installer as _installer
+from swfactory import sonar as _sonar
 from swfactory.common import FactoryError
 
 OK, WARN, FAIL = "OK", "WARN", "FAIL"
@@ -612,8 +613,70 @@ def _sonar_secret(root: Path, gh: _harden.Gh) -> tuple[str, str]:
     return _ABSENT, f"not set - the scan is skipped; the owner runs `gh secret set {SONAR_SECRET}`"
 
 
-def check_sonar(root: Path | str, gh: _harden.Gh | None = None) -> list[Finding]:
+SONAR_SERVER = "sonar: server"
+_FREE_PLAN = (
+    "project not found or not public: on the free plan the SonarCloud project must be public, and "
+    "anonymous access cannot tell a private project from a missing one (docs/sonarcloud.md)"
+)
+
+
+def _github_default_branch(owner: str, repo: str, gh: _harden.Gh) -> tuple[str | None, str]:
+    status, data = gh("GET", f"repos/{owner}/{repo}", None)
+    if status == 0:
+        return None, "the repository default branch is unreadable: gh unavailable"
+    if status != 200:
+        return None, f"the repository default branch is unreadable: HTTP {status}"
+    name = data.get("default_branch") if isinstance(data, dict) else None
+    if not _sonar.valid_branch(name):
+        return None, "the repository default branch is unreadable: unexpected answer"
+    return name, ""
+
+
+def _server_finding(key: str, default: str, project: _sonar.Project) -> Finding:
+    if project.state == _sonar.UNKNOWN:
+        return Finding(WARN, SONAR_SERVER, f"unknown ({project.detail})")
+    if project.state == _sonar.NOT_FOUND:
+        return Finding(WARN, SONAR_SERVER, _FREE_PLAN)
+    if project.main == default:
+        detail = f"public; main branch '{default}' matches the repository default branch"
+        return Finding(OK, SONAR_SERVER, detail)
+    fix = " ; ".join(_sonar.repair_commands(key, default, project))
+    detail = (
+        f"main branch is '{project.main}' but the repository default branch is '{default}', so "
+        f"scans of '{default}' are side-branch analyses with no readable data. Repair, with a "
+        f"token in $SONAR_TOKEN (docs/sonarcloud.md): {fix}"
+    )
+    return Finding(WARN, SONAR_SERVER, detail)
+
+
+def _sonar_server(
+    root: Path, props_text: str, gh: _harden.Gh, fetch: _sonar.Fetch, placeholders: list[str]
+) -> Finding:
+    """Does the SonarCloud project exist, is it public, is its main branch the repository default
+    branch? Anonymous, read-only; no call while setup has not started or without a GitHub remote."""
+    if placeholders:
+        return Finding(
+            OK, SONAR_SERVER, f"skipped (setup has not started: {SONAR_PLACEHOLDER} left)"
+        )
+    try:
+        owner, repo = _harden.repo_slug(root)
+    except FactoryError:
+        return Finding(OK, SONAR_SERVER, "skipped (no github.com origin remote)")
+    key = _sonar.property_value(props_text, "sonar.projectKey")
+    if key is None:
+        return Finding(WARN, SONAR_SERVER, "unknown (no sonar.projectKey in the properties file)")
+    default, why = _github_default_branch(owner, repo, gh)
+    if default is None:
+        return Finding(WARN, SONAR_SERVER, f"unknown ({why})")
+    return _server_finding(key, default, _sonar.read_project(key, fetch))
+
+
+def check_sonar(
+    root: Path | str, gh: _harden.Gh | None = None, fetch: _sonar.Fetch | None = None
+) -> list[Finding]:
     """SonarCloud setup (FACT-35): is the secret there, is the properties file still a template?
+    And (FACT-40) does the SonarCloud project exist, is it public, is its main branch the
+    repository default branch (public API, no token).
 
     Never FAIL: Sonar is optional. A project with neither Sonar file gets one OK notice and no
     GitHub call. While the placeholder remains, a missing secret is only a notice (setup has not
@@ -624,12 +687,10 @@ def check_sonar(root: Path | str, gh: _harden.Gh | None = None) -> list[Finding]
     if not props.is_file() and not (root / _installer.SONAR_WORKFLOW_DEST).is_file():
         note = "not configured (optional; docs/sonarcloud.md in the factory repo)"
         return [Finding(OK, "sonar", note)]
-    state, secret_detail = _sonar_secret(root, gh or _harden.gh_api)
-    keys = (
-        sonar_placeholders(props.read_text(encoding="utf-8", errors="replace"))
-        if props.is_file()
-        else []
-    )
+    gh = gh or _harden.gh_api
+    state, secret_detail = _sonar_secret(root, gh)
+    props_text = props.read_text(encoding="utf-8", errors="replace") if props.is_file() else ""
+    keys = sonar_placeholders(props_text)
     if not props.is_file():
         props_finding = Finding(
             WARN, "sonar: properties", f"{SONAR_PROPERTIES} is missing; the scan is skipped"
@@ -647,7 +708,10 @@ def check_sonar(root: Path | str, gh: _harden.Gh | None = None) -> list[Finding]
         _ABSENT: OK if keys else WARN,
         _UNKNOWN: WARN,
     }[state]
-    return [props_finding, Finding(secret_level, f"sonar: {SONAR_SECRET}", secret_detail)]
+    found = [props_finding, Finding(secret_level, f"sonar: {SONAR_SECRET}", secret_detail)]
+    if props.is_file():
+        found.append(_sonar_server(root, props_text, gh, fetch or _sonar.http_get, keys))
+    return found
 
 
 def format_findings(findings: list[Finding]) -> list[str]:
