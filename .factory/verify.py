@@ -377,11 +377,10 @@ def _decision_identity(meta: dict, filename: str) -> list[str]:
         if meta.get(key) in (None, "")
     ]
     did = meta.get("id")
-    if did in (None, ""):
-        pass
-    elif not isinstance(did, str) or not DECISION_ID_RE.match(did):
+    bad_shape = not isinstance(did, str) or not DECISION_ID_RE.match(did)
+    if did not in (None, "") and bad_shape:
         problems.append(f"id {did!r} is not D-<number>")
-    elif not filename.startswith(f"{did}-"):
+    elif did not in (None, "") and not filename.startswith(f"{did}-"):
         problems.append(f"id {did!r} does not match file name {filename!r}")
     for key, allowed in (("type", DECISION_TYPES), ("status", DECISION_STATUSES)):
         val = meta.get(key)
