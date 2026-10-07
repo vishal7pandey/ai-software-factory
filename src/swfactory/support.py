@@ -122,7 +122,7 @@ def existing_stacks(root: Path, manifest: dict | None = None) -> dict[str, str]:
     """Every stack the repository has, with where it was found (the first source wins)."""
     if manifest is None:
         manifest = _load_manifest(root)[0]
-    found = {name: "the STACKS constant in installer.py" for name in STACKS}
+    found = dict.fromkeys(STACKS, "the STACKS constant in installer.py")
     for source in (_manifest_stacks(manifest), _file_stacks(root)):
         for name, where in source.items():
             found.setdefault(name, where)
