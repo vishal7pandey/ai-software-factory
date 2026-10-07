@@ -2,7 +2,7 @@ id: FACT-48
 type: feature
 title: Generality audit and supported-today matrix
 slug: generality-audit-and-supported-today
-status: implementing
+status: in-review
 risk: low
 jira: FACT-48
 branch: feature/fact-48-generality-audit-and-supported-today
