@@ -79,6 +79,8 @@ def _norm_dates(obj):
         return obj.isoformat()
     if isinstance(obj, dict):
         return {k: _norm_dates(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_norm_dates(v) for v in obj]
     return obj
 
 
@@ -282,6 +284,8 @@ def check_project(
             f"{item['id']}: {p}" for p in _check_approvals_and_docs(item, path.parent, config)
         )
 
+    problems.extend(check_decisions(root))
+
     m = _BRANCH_RE.match(branch) if branch else None
     if m:
         bid = m.group(1).upper()
@@ -295,6 +299,216 @@ def check_project(
                 f"{bid}: branch '{branch}' carries code but status is {item['status']} "
                 "(must be implementing or later)"
             )
+    return problems
+
+
+# --- decision records (FACT-46, docs/ARCHITECTURE.md section 3.11) -----------------------------
+
+DECISION_TYPES = ["dismissal", "design", "charter", "other"]
+DECISION_STATUSES = ["proposed", "accepted", "rejected", "superseded"]
+DISMISSAL_REASONS = ["false positive", "won't fix", "used in tests"]
+# Never decided on the owner's behalf, even with an explicit delegation: a security exception and
+# the project charter.
+NEVER_DELEGATED = ("charter", "dismissal")
+DECISION_KEYS = [
+    "id",
+    "type",
+    "title",
+    "status",
+    "jira",
+    "proposed_by",
+    "proposed_at",
+    "alert",
+    "reason",
+    "options",
+    "decision",
+    "by",
+    "at",
+    "delegated",
+    "note",
+    "subject",
+    "subject_sha256",
+    "superseded_by",
+]
+DECISIONS_DIR = "docs/decisions"
+DECISION_ID_RE = re.compile(r"^D-\d+$")
+DECISION_FILE_RE = re.compile(r"^(D-\d+)-.+\.md$")
+_SHA_RE = re.compile(r"^[0-9a-f]{64}$")
+_FRONT_RE = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.DOTALL)
+
+
+def split_front_matter(text: str) -> tuple[dict, str]:
+    """('---\\nk: v\\n---\\nbody') -> ({'k': 'v'}, 'body'). ValueError without a YAML mapping."""
+    text = text.replace("\r\n", "\n").lstrip("﻿")
+    m = _FRONT_RE.match(text)
+    if not m:
+        raise ValueError("no YAML front matter (the file must start with a '---' line)")
+    try:
+        meta = yaml.safe_load(m.group(1))
+    except yaml.YAMLError as e:
+        first = str(e).splitlines()[0] if str(e) else e
+        raise ValueError(f"front matter is not valid YAML: {first}") from e
+    if not isinstance(meta, dict):
+        raise ValueError("front matter must be a YAML mapping")
+    return _norm_dates(meta), m.group(2)
+
+
+def load_decision(path: Path | str) -> tuple[dict, str]:
+    """Read a decision record: (front matter, body). ValueError when it has no valid front matter."""
+    return split_front_matter(Path(path).read_text(encoding="utf-8-sig"))
+
+
+def _text(value: object) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _decision_basics(meta: dict, filename: str) -> list[str]:
+    problems: list[str] = []
+    for key in ("id", "type", "title", "status", "proposed_by", "proposed_at"):
+        if meta.get(key) in (None, ""):
+            problems.append(f"missing required field '{key}'")
+    did = meta.get("id")
+    if did not in (None, ""):
+        if not isinstance(did, str) or not DECISION_ID_RE.match(did):
+            problems.append(f"id {did!r} is not D-<number>")
+        elif not filename.startswith(f"{did}-"):
+            problems.append(f"id {did!r} does not match file name {filename!r}")
+    for key, allowed in (("type", DECISION_TYPES), ("status", DECISION_STATUSES)):
+        val = meta.get(key)
+        if val not in (None, "") and val not in allowed:
+            problems.append(f"{key} {val!r} is not one of {', '.join(allowed)}")
+    for key in ("title", "proposed_by"):
+        if meta.get(key) not in (None, "") and not _text(meta.get(key)):
+            problems.append(f"{key} must be a non-empty string")
+    proposed_at = meta.get("proposed_at")
+    if proposed_at not in (None, "") and not (
+        isinstance(proposed_at, str) and _DATE_RE.match(proposed_at)
+    ):
+        problems.append(f"proposed_at {proposed_at!r} is not an ISO date (YYYY-MM-DD)")
+    jira = meta.get("jira")
+    if jira is not None and not (isinstance(jira, str) and JIRA_RE.match(jira)):
+        problems.append(f"jira {jira!r} is not a Jira key or null")
+    return problems
+
+
+def decision_option_texts(meta: dict) -> list[str]:
+    """The text of every well-formed option, in order."""
+    options = meta.get("options")
+    if not isinstance(options, list):
+        return []
+    return [o["text"] for o in options if isinstance(o, dict) and _text(o.get("text"))]
+
+
+def _decision_options(meta: dict) -> list[str]:
+    options = meta.get("options")
+    if not isinstance(options, list) or not options:
+        return ["options must be a non-empty list"]
+    problems: list[str] = []
+    recommended = 0
+    for i, opt in enumerate(options, 1):
+        if not isinstance(opt, dict) or not _text(opt.get("text")):
+            problems.append(f"options[{i}] must be a mapping with a non-empty 'text'")
+        elif "recommended" in opt and not isinstance(opt["recommended"], bool):
+            problems.append(f"options[{i}].recommended must be true or false")
+        elif opt.get("recommended"):
+            recommended += 1
+    texts = decision_option_texts(meta)
+    if len(set(texts)) != len(texts):
+        problems.append("option texts must be distinct")
+    if recommended > 1:
+        problems.append("at most one option may be recommended")
+    elif recommended == 0 and meta.get("status") == "proposed" and not problems:
+        problems.append("a proposed record needs one recommended option")
+    return problems
+
+
+def _decision_answer(meta: dict) -> list[str]:
+    """The owner's answer: by/at/decision must fit the status, and a delegation must be honest."""
+    status, by, at = meta.get("status"), meta.get("by"), meta.get("at")
+    problems: list[str] = []
+    if status in ("accepted", "rejected"):
+        if not _text(by):
+            problems.append(f"status is {status} but 'by' is missing")
+        if not (isinstance(at, str) and _DATE_RE.match(at)):
+            problems.append(f"status is {status} but 'at' is missing or not YYYY-MM-DD")
+    if status == "accepted" and meta.get("decision") not in decision_option_texts(meta):
+        problems.append("status is accepted but 'decision' is not the text of one of the options")
+    if status in ("proposed", "rejected") and meta.get("decision") not in (None, ""):
+        problems.append(f"status is {status} but 'decision' is set")
+    if status == "proposed":
+        problems.extend(
+            f"status is proposed but '{key}' is set"
+            for key in ("by", "at")
+            if meta.get(key) not in (None, "")
+        )
+    delegated = meta.get("delegated", False)
+    if not isinstance(delegated, bool):
+        problems.append("delegated must be true or false")
+    elif delegated and not (isinstance(by, str) and by.endswith(DELEGATED_SUFFIX)):
+        problems.append(f"delegated is true but 'by' does not end with '{DELEGATED_SUFFIX}'")
+    if is_delegated(meta) and meta.get("type") in NEVER_DELEGATED:
+        problems.append(f"a {meta.get('type')} decision is never delegated to an agent")
+    return problems
+
+
+def _decision_type_fields(meta: dict) -> list[str]:
+    problems: list[str] = []
+    if meta.get("type") == "dismissal":
+        alert = meta.get("alert")
+        if not (isinstance(alert, str) and alert.startswith(("https://", "http://"))):
+            problems.append("a dismissal needs 'alert': the alert URL (http or https)")
+        if meta.get("reason") not in DISMISSAL_REASONS:
+            problems.append(f"a dismissal needs 'reason', one of {', '.join(DISMISSAL_REASONS)}")
+    if meta.get("status") == "superseded" and not (
+        isinstance(meta.get("superseded_by"), str) and DECISION_ID_RE.match(meta["superseded_by"])
+    ):
+        problems.append("status is superseded but 'superseded_by' is not a D-<number>")
+    subject = meta.get("subject")
+    if subject is not None:
+        parts = str(subject).replace("\\", "/").split("/")
+        if not _text(subject) or parts[0] == "" or ".." in parts or re.match(r"^[A-Za-z]:", parts[0]):
+            problems.append("subject must be a path inside the project (no '..', not absolute)")
+        elif meta.get("status") == "accepted" and not _SHA_RE.match(
+            str(meta.get("subject_sha256") or "")
+        ):
+            problems.append("status is accepted but 'subject_sha256' is not a sha256 hex digest")
+    return problems
+
+
+def validate_decision(meta: dict, filename: str) -> list[str]:
+    """Schema check of one decision record's front matter. Empty list means valid. Pure."""
+    if not isinstance(meta, dict):
+        return ["front matter must be a YAML mapping"]
+    return (
+        _decision_basics(meta, filename)
+        + _decision_options(meta)
+        + _decision_answer(meta)
+        + _decision_type_fields(meta)
+    )
+
+
+def check_decisions(root: Path | str) -> list[str]:
+    """Rule 6: every `docs/decisions/D-<n>-<slug>.md` is valid. Other files there (ADRs, the
+    template) are not decision records and are ignored. Returns '<id>: <reason>' lines."""
+    folder = Path(root) / DECISIONS_DIR
+    if not folder.is_dir():
+        return []
+    problems: list[str] = []
+    seen: dict[str, str] = {}
+    for path in sorted(folder.glob("*.md")):
+        m = DECISION_FILE_RE.match(path.name)
+        if not m:
+            continue
+        did = m.group(1)
+        if did in seen:
+            problems.append(f"{did}: duplicate id in {seen[did]} and {path.name}")
+        seen.setdefault(did, path.name)
+        try:
+            meta, _ = load_decision(path)
+        except (ValueError, OSError, UnicodeDecodeError) as e:
+            problems.append(f"{did}: {path.name}: {e}")
+            continue
+        problems.extend(f"{did}: {p}" for p in validate_decision(meta, path.name))
     return problems
 
 

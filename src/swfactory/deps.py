@@ -20,7 +20,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote
 
-from swfactory import harden
+from swfactory import common, harden
 from swfactory.common import FactoryError
 
 WINDOW_DAYS = 7
@@ -58,8 +58,7 @@ def _why(status: int) -> str:
 
 def _ascii(text: object, limit: int) -> str:
     """Printable ASCII only, one line, cut at `limit`: PR titles are third-party text."""
-    s = re.sub(r"\s+", " ", re.sub(r"[^\x20-\x7e]", "?", str(text))).strip()
-    return s if len(s) <= limit else s[: limit - 3].rstrip() + "..."
+    return common.ascii_line(text, limit)
 
 
 @dataclass(frozen=True)
