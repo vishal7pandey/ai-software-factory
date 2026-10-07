@@ -1,0 +1,20 @@
+id: FACT-40
+type: feature
+title: 'Sonar kit template: default branch, project test command, locked deps, doctor
+  check'
+slug: sonar-kit-template-default-branch
+status: implementing
+risk: medium
+jira: FACT-40
+branch: feature/fact-40-sonar-kit-template-default-branch
+created: '2026-10-07'
+approvals:
+  spec:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-07'
+    delegated: true
+  plan:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-07'
+    delegated: true
+pr: null
