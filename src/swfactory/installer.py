@@ -15,7 +15,7 @@ from pathlib import Path
 
 import yaml
 
-from swfactory import __version__, adopt_inspect, common, dependabot
+from swfactory import __version__, adopt_inspect, common, dependabot, sonar
 from swfactory.common import FactoryError
 
 BEGIN = "<!-- factory:begin -->"
@@ -273,6 +273,39 @@ def _sonar_project_key(root: Path) -> str:
     return f"{owner}_{repo}"
 
 
+def _render_sonar(
+    items: list[Item], root: Path, stack: str, inspection: adopt_inspect.Inspection | None
+) -> list[str]:
+    """Fit a Sonar file that is about to be CREATED to the project (FACT-40): the default branch,
+    the project's own test command and the python version of its CI. An existing file is never
+    changed. The CI is read from disk, or from the generated CI item on a fresh adopt."""
+    by_dest = {i.dest: i for i in items if i.mode == "create"}
+    workflow, props = by_dest.get(SONAR_WORKFLOW_DEST), by_dest.get(sonar.PROPERTIES_DEST)
+    new_workflow = workflow is not None and not (root / SONAR_WORKFLOW_DEST).exists()
+    new_props = props is not None and not (root / sonar.PROPERTIES_DEST).exists()
+    if not (new_workflow or new_props):
+        return []
+    ci_item = by_dest.get(adopt_inspect.CI_DEST)
+    ci_file = root / adopt_inspect.CI_DEST
+    try:
+        ci_text = ci_file.read_text(encoding="utf-8") if ci_file.is_file() else None
+    except (OSError, UnicodeDecodeError):
+        ci_text = None
+    if ci_text is None and ci_item is not None:
+        ci_text = ci_item.content
+    notes: list[str] = []
+    if workflow is not None and new_workflow:
+        branch = inspection.default_branch if inspection else adopt_inspect.default_branch(root)
+        workflow.content, notes = sonar.render_workflow(
+            workflow.content, stack=stack, root=root, ci_text=ci_text, branch=branch
+        )
+    if props is not None and new_props:
+        props.content = sonar.render_properties(
+            props.content, stack=stack, root=root, ci_text=ci_text
+        )
+    return notes
+
+
 def _insert_todo(action: Action, todo: str) -> None:
     """Put the TODO commands section directly above the factory block of a new/appended block."""
     if action.data is None or BEGIN.encode() not in action.data:
@@ -308,12 +341,6 @@ def _install(
             and not (root / item.dest).exists()
         ):
             item.content = dependabot.render_for(root, item.content)
-        if (
-            inspection is not None
-            and item.dest == SONAR_WORKFLOW_DEST
-            and not (root / item.dest).exists()
-        ):
-            item.content = adopt_inspect.point_at_branch(item.content, inspection.default_branch)
     ci_report = adopt_inspect.CiReport()
     if inspection is not None:
         for item in items:
@@ -327,6 +354,7 @@ def _install(
                 )
                 if check and dry_run:
                     ci_report.notes.append("checks not run (--dry-run runs no project command)")
+    sonar_notes = _render_sonar(items, root, config["stack"], inspection)
     actions = [_plan_item(item, root, managed, force) for item in items]
     todo_added = False
     if inspection is not None and not inspection.has_commands_section:
@@ -363,16 +391,16 @@ def _install(
         if existing != config:
             common.dump_yaml(config, root / CONFIG_REL)
 
-    if inspection is not None:
-        result = ci_report.lines()
-        if todo_added:
-            n = len(inspection.detected_commands)
-            verb = "would add" if dry_run else "added"
-            result.append(f"AGENTS.md: {verb} a commands TODO section ({n} detected command(s))")
-        if result:
-            print("result:")
-            for line in result:
-                print(f"  {line}")
+    result = ci_report.lines() if inspection is not None else []
+    if inspection is not None and todo_added:
+        n = len(inspection.detected_commands)
+        verb = "would add" if dry_run else "added"
+        result.append(f"AGENTS.md: {verb} a commands TODO section ({n} detected command(s))")
+    result += [f"sonar.yml: {note}" for note in sonar_notes]
+    if result:
+        print("result:")
+        for line in result:
+            print(f"  {line}")
 
     if not (created or updated or count["CONFLICT"]):
         print("up to date")

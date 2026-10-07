@@ -70,8 +70,16 @@ def _last_line(output: str) -> str:
 # --- default branch and workflow triggers ---------------------------------------------------------
 
 
+def _branch_exists(root: Path, name: str) -> bool:
+    for ref in (f"refs/heads/{name}", f"refs/remotes/origin/{name}"):
+        if common.git("rev-parse", "--verify", "-q", ref, cwd=root, check=False):
+            return True
+    return False
+
+
 def default_branch(root: Path) -> str | None:
-    """origin/HEAD if known, else the current branch, else None."""
+    """origin/HEAD if known; else the only one of `main`/`master` that exists (a feature branch
+    checked out during `sync` must not become the trigger); else the current branch; else None."""
     if not common.is_git_repo(root):
         return None
     ref = common.git(
@@ -79,7 +87,11 @@ def default_branch(root: Path) -> str | None:
     )
     if ref:
         return ref.removeprefix("origin/")
-    return common.git("symbolic-ref", "--short", "-q", "HEAD", cwd=root, check=False) or None
+    current = common.git("symbolic-ref", "--short", "-q", "HEAD", cwd=root, check=False) or None
+    existing = [b for b in ("main", "master") if _branch_exists(root, b)]
+    if current not in existing and len(existing) == 1:
+        return existing[0]
+    return current
 
 
 def _branch_list(value) -> list[str] | None:
