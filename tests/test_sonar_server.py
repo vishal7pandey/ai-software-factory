@@ -35,7 +35,7 @@ def write(path: Path, text: str) -> None:
 
 def make_project(tmp_path: Path, props: str = FILLED, *, remote: str | None = None) -> Path:
     p = tmp_path / "proj"
-    p.mkdir()
+    p.mkdir(parents=True)
     common.git("init", "-b", "main", cwd=p)
     if remote is not False:
         common.git("remote", "add", "origin", remote or "https://github.com/me/proj.git", cwd=p)
@@ -249,6 +249,28 @@ def test_doctor_prints_the_server_line_and_never_a_secret_or_an_exit_one(
     (line,) = [ln for ln in out.splitlines() if "sonar: server" in ln]
     assert line.startswith("WARN") and "project_branches/rename" in line
     assert MARKER not in out
+
+
+def tests_finding(p: Path) -> list[checks.Finding]:
+    return [f for f in checks.check_sonar(p, Gh(), Server()) if f.name == "sonar: tests"]
+
+
+def test_doctor_warns_when_sonar_tests_is_missing(tmp_path):
+    (f,) = tests_finding(make_project(tmp_path, FILLED))
+    assert f.level == checks.WARN
+    assert "sonar.tests=." in f.detail and "docs/sonarcloud.md" in f.detail
+    (f,) = tests_finding(make_project(tmp_path / "b", FILLED + "sonar.tests=.\n"))
+    assert f.level == checks.OK
+    (f,) = tests_finding(make_project(tmp_path / "c", FILLED + "# sonar.tests=.\n"))
+    assert f.level == checks.WARN  # a comment does not count
+    (f,) = tests_finding(make_project(tmp_path / "d", PLACEHOLDER))
+    assert f.level == checks.WARN  # checked while setup has not finished too
+
+
+def test_no_tests_finding_without_a_properties_file(tmp_path):
+    p = make_project(tmp_path)
+    (p / "sonar-project.properties").unlink()
+    assert tests_finding(p) == []
 
 
 # --- the one function that touches the network ---------------------------------------------------

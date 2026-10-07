@@ -49,6 +49,7 @@ place that opens a connection; conftest replaces it like `_run_gh`.
 | T4 | Templates: lock-only, SHA pins, header comment; the factory's own `sonar.yml` | `kit/sonar/python.yml`, `kit/sonar/node.yml`, `.github/workflows/sonar.yml` | AC5, AC6 | template and self tests green; PR scan |
 | T5 | Docs: public project, main branch, commands, locked local recipe; ARCHITECTURE 3.9 two lines | `docs/sonarcloud.md`, `docs/ARCHITECTURE.md` | AC7, AC9 | contract test green |
 | T6 | Doctor: `sonar.read_project`, `http`, `check_sonar` finding, guard fixture | `src/swfactory/sonar.py`, `src/swfactory/checks.py`, `tests/conftest.py` | AC8 | AC8 tests green; real run read-only against the factory project |
+| T6b | `sonar.tests=.` in both properties templates and the repo's own file; python inclusions `**/tests/**`; doctor finding `sonar: tests`; docs line; verify empirically on the PR scan log (message gone, no overlap error, sources analysed), numbers before and after from the public API | `kit/sonar/*.properties`, `sonar-project.properties`, `src/swfactory/checks.py`, `docs/sonarcloud.md`, tests | AC10, AC11 | tests green; PR scan log read with `gh run view <id> --log` |
 | T7 | Gates and audit: lint, `sync --check .`, verify, ruff, full suite; mutation audit | all | AC9 | commands exit 0; audit table |
 
 ## Data, API and migration impact

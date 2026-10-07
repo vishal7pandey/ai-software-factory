@@ -86,6 +86,21 @@ def test_adopt_lays_both_files_with_project_key_and_placeholder(tmp_path, stack)
     assert yaml.safe_load((p / WORKFLOW).read_text(encoding="utf-8"))["name"] == "sonar"
 
 
+@pytest.mark.parametrize("stack", STACKS)
+def test_properties_templates_set_sonar_tests_and_nested_test_inclusions(tmp_path, stack):
+    """FACT-40 AC10: `sonar.tests=.` beside `sonar.sources=.` (tests live under the source tree), so
+    the inclusions classify files and the scanner stops guessing test files from their names."""
+    template = (ROOT / "kit" / "sonar" / f"{stack}.properties").read_text(encoding="utf-8")
+    lines = [ln for ln in template.splitlines() if ln and not ln.startswith("#")]
+    assert "sonar.sources=." in lines and "sonar.tests=." in lines
+    inclusions = next(ln for ln in lines if ln.startswith("sonar.test.inclusions="))
+    if stack == "python":
+        assert "**/tests/**" in inclusions.split("=", 1)[1].split(",")
+    p = make_project(tmp_path, stack)
+    assert adopt(p) == 0
+    assert "sonar.tests=.\n" in (p / PROPS).read_text(encoding="utf-8")
+
+
 @pytest.mark.parametrize(
     ("stack", "wanted", "other"),
     [
@@ -651,6 +666,11 @@ def test_the_doc_states_the_public_project_and_main_branch_facts():
     assert delete in text and rename in text
     assert text.index("project_branches/delete") < text.index("project_branches/rename")
     assert "sonar: server" in text  # doctor detects it
+
+
+def test_the_doc_names_sonar_tests():
+    text = doc_text()
+    assert "sonar.tests=." in text and "sonar: tests" in text
 
 
 def test_the_doc_local_scan_recipe_uses_only_locked_dependencies():

@@ -139,6 +139,31 @@ Medium: the rewrite of a command is text surgery on a project's CI; the guard ra
 runs when the file is created. The template change reaches adopted projects only when they hand-apply it (create mode).
 The anonymous API contract (`components/show`, `project_branches/list`) was probed live; an API change makes `doctor` say `unknown`.
 
+## Amendment 2026-10-07 (owner scope addition: `sonar.tests`)
+
+Seen on ade's SonarCloud project: "SonarPython detected files that look like test code but `sonar.tests` is not configured.
+Rules targeting production code were not executed on these files." Root cause, confirmed in the factory's own scan log of
+`main` (run 37630465177): the kit properties set `sonar.sources=.` and `sonar.test.inclusions=...` but never `sonar.tests`, so
+the scanner prints `The property "sonar.tests" is not set` and falls back to guessing test files from their names, while the
+inclusions already list them under `Excluded sources`. All three adopted projects inherited it. Baseline of the factory project
+on the public API before the change: ncloc 4766, coverage 94.7, 53 open issues (21 vulnerabilities, 32 code smells, 0 bugs),
+duplication 0.0.
+
+- R11. Both kit properties templates (python and node) set `sonar.tests=.` next to `sonar.sources=.`, with the existing
+  `sonar.test.inclusions` classifying the files (the documented form when tests live under the source tree). The python
+  inclusions also cover tests in a nested directory (`**/tests/**`, e.g. ade's `src/tests`). The factory's own
+  `sonar-project.properties` follows. The change is proven empirically on the factory's own scan in the PR: the log no longer prints
+  the `sonar.tests is not set` message, no overlap error appears, and the sources are still analysed; numbers before and after are
+  read from the public API and recorded on the ticket. If the scanner rejects the overlap, `sonar.tests` lists the real test
+  directories and `sonar.exclusions` covers them, and the templates follow what works.
+- R12. `factory doctor` warns (`sonar: tests`) when an existing `sonar-project.properties` has no `sonar.tests` (comment lines
+  ignored), saying what to add; no warning when it is set.
+
+- AC10. (R11) Contract test: both templates and the factory's own properties contain a `sonar.tests` line; the python
+  inclusions contain `**/tests/**`; an adopted project's file has it; the docs name the property.
+- AC11. (R12) With `gh` and the API stubbed: properties without `sonar.tests` give a WARN `sonar: tests` naming the fix;
+  with it, an OK; a commented-out `# sonar.tests=.` still warns; a project without a properties file gets no such finding.
+
 ## Open questions
 
 None open. Recorded owner delegation for approval: `approve FACT-40 spec --delegated "Vishal Pandey"`.
