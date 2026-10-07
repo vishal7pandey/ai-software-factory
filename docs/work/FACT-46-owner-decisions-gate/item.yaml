@@ -2,7 +2,7 @@ id: FACT-46
 type: feature
 title: Owner decisions gate
 slug: owner-decisions-gate
-status: implementing
+status: in-review
 risk: medium
 jira: FACT-46
 branch: feature/fact-46-owner-decisions-gate
@@ -16,4 +16,4 @@ approvals:
     by: Vishal Pandey (delegated to agent)
     at: '2026-10-07'
     delegated: true
-pr: null
+pr: https://github.com/vishal7pandey/ai-software-factory/pull/21
