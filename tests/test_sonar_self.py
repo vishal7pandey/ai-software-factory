@@ -38,7 +38,7 @@ def test_properties_have_the_real_organisation_and_project_key():
 
 
 def test_the_own_properties_set_sonar_tests():
-    """FACT-40 AC10: without `sonar.tests` the scanner logs 'The property sonar.tests is not set'."""
+    """FACT-40 AC10: without `sonar.tests` the scanner logs that the property is not set."""
     props = properties()
     assert props["sonar.sources"] == "." and props["sonar.tests"] == "."
     assert "**/tests/**" in props["sonar.test.inclusions"].split(",")

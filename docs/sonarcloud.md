@@ -63,6 +63,16 @@ before this existed, can copy the files from `kit/sonar/` in the factory reposit
 6. Optional: a repository variable `SONAR_HOST_URL` overrides the server; unset, it is
    `https://sonarcloud.io`.
 
+## `sonar.tests`
+
+The properties file sets `sonar.sources=.` and `sonar.tests=.` together with `sonar.test.inclusions=...`:
+tests live under the source tree, and the inclusions say which files are tests. Without `sonar.tests` the
+scanner logs `The property "sonar.tests" is not set` (SonarCloud shows "files that look like test code but
+sonar.tests is not configured") and only guesses test files from their names; rules for production code then
+run on test code and issue, coverage and duplication numbers skew. `factory doctor` prints `sonar: tests`
+(a warning when the property is missing). A project whose tests are in separate directories may list them
+instead (`sonar.tests=tests,src/tests`) and exclude them from `sonar.sources`.
+
 ## Two facts that cost real time
 
 A green **sonarcloud** job is not a readable analysis. Both of these make the scan succeed in CI while the

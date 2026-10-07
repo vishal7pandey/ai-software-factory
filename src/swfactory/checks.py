@@ -649,6 +649,18 @@ def _server_finding(key: str, default: str, project: _sonar.Project) -> Finding:
     return Finding(WARN, SONAR_SERVER, detail)
 
 
+def _sonar_tests(props_text: str) -> Finding:
+    """`sonar.tests` set? Without it the scanner only guesses test files from their names and warns
+    that rules for production code were not run on them (FACT-40)."""
+    if _sonar.property_value(props_text, "sonar.tests"):
+        return Finding(OK, "sonar: tests", "sonar.tests is set")
+    detail = (
+        "sonar.tests is not set: test files are guessed from their names; add `sonar.tests=.` "
+        "beside sonar.sources (docs/sonarcloud.md)"
+    )
+    return Finding(WARN, "sonar: tests", detail)
+
+
 def _sonar_server(
     root: Path, props_text: str, gh: _harden.Gh, fetch: _sonar.Fetch, placeholders: list[str]
 ) -> Finding:
@@ -710,6 +722,7 @@ def check_sonar(
     }[state]
     found = [props_finding, Finding(secret_level, f"sonar: {SONAR_SECRET}", secret_detail)]
     if props.is_file():
+        found.append(_sonar_tests(props_text))
         found.append(_sonar_server(root, props_text, gh, fetch or _sonar.http_get, keys))
     return found
 
