@@ -57,6 +57,23 @@ def test_generated_coverage_files_are_ignored_by_git():
     assert "coverage.xml" in ignored and ".coverage" in ignored
 
 
+def test_the_own_workflow_pins_and_locks_like_the_template():
+    """FACT-40: the repo's own sonar.yml follows the kit's rules (SHA-pinned third-party actions,
+    `uv sync --locked`), so a re-scan has nothing left to report on those lines."""
+    text = (ROOT / ".github" / "workflows" / "sonar.yml").read_text(encoding="utf-8")
+    uses = re.findall(r"uses: ([\w.-]+/[\w.-]+)@(\S+)([^\n]*)", text)
+    third = [(a, ref, rest) for a, ref, rest in uses if not a.startswith("actions/")]
+    assert {a for a, _, _ in third} == {"astral-sh/setup-uv", "SonarSource/sonarqube-scan-action"}
+    for action, ref, rest in third:
+        assert re.fullmatch(r"[0-9a-f]{40}", ref), action
+        assert re.fullmatch(r"\s+# v\d+(\.\d+){0,2}", rest), action
+    sync = next(s["run"] for s in steps() if s.get("run", "").startswith("uv sync"))
+    assert "--locked" in sync.split()
+    kit = (ROOT / "kit" / "sonar" / "python.yml").read_text(encoding="utf-8")
+    for action, ref, _ in third:  # the same commits as the kit template
+        assert f"{action}@{ref}" in kit
+
+
 def test_the_coverage_step_installs_nothing_outside_the_lockfile():
     """FACT-42 (Sonar githubactions:S8544): `uv run --with` resolves a fresh, unlocked version."""
     command = next(s for s in steps() if "pytest" in s.get("run", ""))["run"]

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from swfactory import adopt_inspect, common, harden
+from swfactory import adopt_inspect, common, harden, sonar
 
 # The developer's real home, captured at import time, before any test can redirect it. The registry
 # is user-level data outside the repo (Treaty 3.6): no test may read or write it (FACT-18).
@@ -58,3 +58,11 @@ def no_real_gh(monkeypatch):
     never reaches the network: the one function that starts `gh` answers "gh unusable" (FACT-33).
     A test that wants GitHub answers passes its own runner or monkeypatches `harden.gh_api`."""
     monkeypatch.setattr(harden, "_run_gh", lambda argv, stdin: (127, ""))
+
+
+@pytest.fixture(autouse=True)
+def no_real_sonarcloud(monkeypatch):
+    """`doctor` reads the public SonarCloud API through `sonar.http_get`, whose one network call is
+    `sonar._request`. The suite never reaches the network: it answers "unreachable" (FACT-40).
+    A test that wants SonarCloud answers passes its own `fetch` or monkeypatches `sonar.http_get`."""
+    monkeypatch.setattr(sonar, "_request", lambda url: (0, ""))

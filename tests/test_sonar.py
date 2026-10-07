@@ -7,6 +7,7 @@ is extracted from the real workflow YAML and executed with bash; doctor tests st
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -197,7 +198,7 @@ def test_checkout_has_full_history(stack):
 @pytest.mark.parametrize("stack", STACKS)
 def test_scan_uses_the_pinned_action_and_the_secret(stack):
     scan = next(s for s in steps(stack) if "sonarqube-scan-action" in s.get("uses", ""))
-    assert scan["uses"] == "SonarSource/sonarqube-scan-action@v8"
+    assert scan["uses"].startswith("SonarSource/sonarqube-scan-action@")
     assert scan["env"]["SONAR_TOKEN"] == "${{ secrets.SONAR_TOKEN }}"
     assert scan["env"]["SONAR_HOST_URL"] == "${{ vars.SONAR_HOST_URL || 'https://sonarcloud.io' }}"
 
@@ -225,9 +226,37 @@ def run_lines(stack: str) -> str:
     return "\n".join(s["run"] for s in steps(stack) if "run" in s and s.get("id") != "guard")
 
 
+SHA_USES = re.compile(r"^\s*(?:- )?uses: (?P<action>[\w.-]+/[\w.-]+)@(?P<ref>\S+)(?P<rest>.*)$")
+
+
+@pytest.mark.parametrize("stack", STACKS)
+def test_third_party_actions_are_pinned_to_a_commit_sha(stack):
+    """FACT-40 (Sonar githubactions:S7637): every action outside `actions/` is a full commit SHA with
+    its version in a trailing comment, so Dependabot can keep it current."""
+    text = (ROOT / "kit" / "sonar" / f"{stack}.yml").read_text(encoding="utf-8")
+    uses = [m for m in map(SHA_USES.match, text.splitlines()) if m]
+    assert uses
+    third_party = [m for m in uses if not m["action"].startswith("actions/")]
+    assert {m["action"] for m in third_party} >= {"SonarSource/sonarqube-scan-action"}
+    for m in third_party:
+        assert re.fullmatch(r"[0-9a-f]{40}", m["ref"]), m.group(0)
+        assert re.fullmatch(r"\s+# v\d+(\.\d+){0,2}", m["rest"]), m.group(0)
+
+
+def test_python_template_installs_only_from_the_lock():
+    """FACT-40 (Sonar githubactions:S8544): no `--with`, no unlocked `uv sync` or `uv run`."""
+    runs = [s["run"] for s in steps("python") if "uv " in s.get("run", "")]
+    assert runs
+    assert not [r for r in runs if "--with" in r]
+    sync = next(r for r in runs if r.startswith("uv sync"))
+    assert "--locked" in sync.split()
+    test = next(r for r in runs if "pytest" in r)
+    assert test.startswith("uv run --locked --no-sync python -m pytest")
+
+
 def test_python_template_produces_coverage_xml_before_the_scan():
     text = run_lines("python")
-    assert "--cov-report=xml:coverage.xml" in text and "pytest-cov" in text
+    assert "--cov-report=xml:coverage.xml" in text and "--with pytest-cov" not in text
     names = [s.get("uses", "") + s.get("run", "") for s in steps("python")]
     cov = next(i for i, t in enumerate(names) if "coverage.xml" in t)
     scan = next(i for i, t in enumerate(names) if "sonarqube-scan-action" in t)
@@ -448,7 +477,7 @@ def test_secret_present_is_ok_and_calls_only_the_list(adopted):
     f = sonar(adopted, gh)
     assert f["sonar: SONAR_TOKEN"].level == checks.OK
     assert "present" in f["sonar: SONAR_TOKEN"].detail
-    assert [c[:2] for c in gh.calls] == [("GET", f"{SECRETS}?per_page=100")]
+    assert [c[:2] for c in gh.calls if SECRETS in c[1]] == [("GET", f"{SECRETS}?per_page=100")]
     assert f["sonar: properties"].level == checks.OK
 
 
@@ -605,6 +634,29 @@ def test_the_how_to_covers_every_owner_step():
     ):
         assert needle in text, needle
     assert "sonar.qualitygate.wait=true" in text  # the opt-in for a failing gate
+
+
+def doc_text() -> str:
+    return " ".join((ROOT / "docs" / "sonarcloud.md").read_text(encoding="utf-8").split())
+
+
+def test_the_doc_states_the_public_project_and_main_branch_facts():
+    """FACT-40 AC7: two facts that cost real time, with the exact repair commands."""
+    text = doc_text()
+    assert "free plan" in text and "must be public" in text
+    assert "succeeds" in text and "nothing can be read" in text
+    assert "main branch" in text and "default branch" in text and "`master`" in text
+    delete = "curl -s -X POST -u \"$SONAR_TOKEN:\" \"https://sonarcloud.io/api/project_branches/delete?project="
+    rename = "curl -s -X POST -u \"$SONAR_TOKEN:\" \"https://sonarcloud.io/api/project_branches/rename?project="
+    assert delete in text and rename in text
+    assert text.index("project_branches/delete") < text.index("project_branches/rename")
+    assert "sonar: server" in text  # doctor detects it
+
+
+def test_the_doc_local_scan_recipe_uses_only_locked_dependencies():
+    text = doc_text()
+    assert "--with pytest-cov" not in text
+    assert "uv run --locked --no-sync python -m pytest" in text and "uv add --dev pytest-cov" in text
 
 
 def test_security_policy_has_exactly_one_pointer_line():
