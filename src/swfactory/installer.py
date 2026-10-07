@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import keyword
+import os
 import re
 import sys
 from dataclasses import dataclass
@@ -166,6 +167,12 @@ def _plan_block(item: Item, dest: Path, managed: dict, force: bool) -> Action:
 
 
 def _plan_item(item: Item, root: Path, managed: dict, force: bool) -> Action:
+    # A manifest destination or skill target is data from outside this project: it must resolve
+    # inside the project root (no `..`, no absolute path, no symlink out) before anything reads or
+    # writes it. Every item is planned before the first write, so a bad one aborts the whole run.
+    base = os.path.realpath(root)
+    if not os.path.realpath(os.path.join(base, item.dest)).startswith(base + os.sep):
+        raise FactoryError(f"destination '{item.dest}' is outside the project {root}")
     dest = root / item.dest
     if item.mode == "block":
         return _plan_block(item, dest, managed, force)
@@ -347,9 +354,12 @@ def _install(
     if not dry_run:
         for a in actions:
             if a.data is not None:
-                target = root / a.dest
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(a.data)
+                base = os.path.realpath(root)
+                target = os.path.realpath(os.path.join(base, a.dest))
+                if not target.startswith(base + os.sep):
+                    raise FactoryError(f"destination '{a.dest}' is outside the project {root}")
+                Path(target).parent.mkdir(parents=True, exist_ok=True)
+                Path(target).write_bytes(a.data)
         if existing != config:
             common.dump_yaml(config, root / CONFIG_REL)
 
@@ -477,10 +487,19 @@ def _save_registry(data: dict) -> None:
                 if not line.startswith("#"):
                     break
                 header.append(line)
-        common.dump_yaml(data, p)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        # The registry file must stay inside its own directory: a registry that is a symlink to
+        # somewhere else would redirect the write (FACT-43).
+        base = os.path.realpath(p.parent)
+        dest = os.path.realpath(p)
+        text = common.yaml_text(data)
         if header:  # keep the file's leading comment; PyYAML would drop it
-            body = p.read_text(encoding="utf-8")
-            p.write_text("\n".join(header) + "\n" + body, encoding="utf-8", newline="\n")
+            text = "\n".join(header) + "\n" + text
+        if dest.startswith(base + os.sep):
+            with open(dest, "w", encoding="utf-8", newline="\n") as fh:
+                fh.write(text)
+        else:
+            raise FactoryError(f"the registry {p} resolves outside its directory ({dest})")
     except OSError as e:
         raise FactoryError(f"cannot write the registry {p}: {e}") from e
 
@@ -622,6 +641,35 @@ def package_name(name: str) -> str:
     return pkg
 
 
+def _render_template(data: bytes, name: str, pkg: str) -> bytes:
+    """Text templates: newlines normalised, `{{name}}`/`{{package}}` filled. Binary files pass."""
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return data
+    text = common.normalise_newlines(text).replace("{{name}}", name).replace("{{package}}", pkg)
+    return text.encode("utf-8")
+
+
+def _copy_template(template: Path, root: str, name: str, pkg: str) -> None:
+    """Copy the template tree under `root` (a realpath); a path that leaves it aborts the copy."""
+    for src in sorted(template.rglob("*")):
+        rel = src.relative_to(template)
+        if "__pycache__" in rel.parts or src.suffix == ".pyc":
+            continue
+        parts = [pkg if part == "__package__" else part for part in rel.parts]
+        dst = os.path.realpath(os.path.join(root, *parts))
+        if dst.startswith(root + os.sep):
+            if src.is_dir():
+                os.makedirs(dst, exist_ok=True)
+            else:
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                with open(dst, "wb") as fh:
+                    fh.write(_render_template(src.read_bytes(), name, pkg))
+        else:
+            raise FactoryError(f"template path '{rel.as_posix()}' is outside the project {root}")
+
+
 def new_project(name: str, *, stack: str = "python", parent: str | Path | None = None) -> int:
     pkg = package_name(name)
     template = common.templates_dir() / stack
@@ -631,25 +679,13 @@ def new_project(name: str, *, stack: str = "python", parent: str | Path | None =
     target = base / name
     if target.exists() and (not target.is_dir() or any(target.iterdir())):
         raise FactoryError(f"{target} already exists and is not empty")
+    # Nothing is written outside the new project: the project itself under `base`, and every
+    # template path under the project (FACT-43).
+    root = os.path.realpath(target)
+    if not root.startswith(os.path.realpath(base) + os.sep):
+        raise FactoryError(f"project '{name}' resolves outside {base}")
 
-    for src in sorted(template.rglob("*")):
-        rel = src.relative_to(template)
-        if "__pycache__" in rel.parts or src.suffix == ".pyc":
-            continue
-        dst = target.joinpath(*[pkg if part == "__package__" else part for part in rel.parts])
-        if src.is_dir():
-            dst.mkdir(parents=True, exist_ok=True)
-            continue
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        data = src.read_bytes()
-        try:
-            text = data.decode("utf-8")
-        except UnicodeDecodeError:
-            dst.write_bytes(data)
-            continue
-        text = common.normalise_newlines(text)
-        text = text.replace("{{name}}", name).replace("{{package}}", pkg)
-        dst.write_bytes(text.encode("utf-8"))
+    _copy_template(template, root, name, pkg)
     target.mkdir(parents=True, exist_ok=True)
 
     common.git("init", "-b", "main", cwd=target)

@@ -97,13 +97,13 @@ def load_yaml(path: Path | str) -> dict:
     return data if data is not None else {}
 
 
+def yaml_text(data: dict) -> str:
+    return yaml.safe_dump(data, sort_keys=False, allow_unicode=True, default_flow_style=False)
+
+
 def dump_yaml(data: dict, path: Path | str) -> None:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    Path(path).write_text(
-        yaml.safe_dump(data, sort_keys=False, allow_unicode=True, default_flow_style=False),
-        encoding="utf-8",
-        newline="\n",
-    )
+    Path(path).write_text(yaml_text(data), encoding="utf-8", newline="\n")
 
 
 _FM = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.DOTALL)

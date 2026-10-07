@@ -1,0 +1,19 @@
+id: FACT-43
+type: bug
+title: Contain installer writes
+slug: contain-installer-writes
+status: in-review
+risk: low
+jira: FACT-43
+branch: fix/fact-43-contain-installer-writes
+created: '2026-10-06'
+approvals:
+  spec:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-06'
+    delegated: true
+  plan:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-06'
+    delegated: true
+pr: https://github.com/vishal7pandey/ai-software-factory/pull/19
