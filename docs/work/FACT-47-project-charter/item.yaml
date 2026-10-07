@@ -1,0 +1,19 @@
+id: FACT-47
+type: feature
+title: Project charter
+slug: project-charter
+status: merged
+risk: medium
+jira: FACT-47
+branch: feature/fact-47-project-charter
+created: '2026-10-07'
+approvals:
+  spec:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-07'
+    delegated: true
+  plan:
+    by: Vishal Pandey (delegated to agent)
+    at: '2026-10-07'
+    delegated: true
+pr: https://github.com/vishal7pandey/ai-software-factory/pull/22

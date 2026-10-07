@@ -17,6 +17,7 @@ def run(args: argparse.Namespace) -> int:
             findings += checks.check_sonar(adopted)
             findings += checks.check_dependencies(adopted)
             findings += checks.check_decisions(adopted)
+            findings += checks.check_charter(adopted)
     else:
         findings += checks.check_tools()
         root = checks.adopted_root(".")
@@ -27,6 +28,7 @@ def run(args: argparse.Namespace) -> int:
             findings += checks.check_sonar(root)
             findings += checks.check_dependencies(root)
             findings += checks.check_decisions(root)
+            findings += checks.check_charter(root)
     for line in checks.format_findings(findings):
         print(line)
     fails = len(checks.failures(findings))

@@ -580,7 +580,9 @@ def test_doctor_after_a_real_adopt_has_no_warning_for_a_local_only_project(tmp_p
     assert adopt(p) == 0
     capsys.readouterr()
     code, out = doctor_out(capsys, p)
-    assert code == 0 and "WARN" not in out and "FAIL" not in out
+    warns = [ln for ln in out.splitlines() if ln.startswith("WARN")]
+    assert code == 0 and "FAIL" not in out
+    assert len(warns) == 1 and "no approved charter" in warns[0]  # the charter template (FACT-47)
     assert "sonar: properties" in out
 
 
