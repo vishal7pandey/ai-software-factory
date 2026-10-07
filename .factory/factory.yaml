@@ -33,7 +33,7 @@ managed:
   .factory/templates/work/spec.bug.md: 3fb67e255b545219614092c973e6d7caa73b493760bf7cf6dfa8931276ea8bdd
   .factory/templates/work/spec.feature.md: f6b256a029fda98ce830d5a5a24b6ce8767aa84bcc2e33496313ea4bca71477a
   .factory/templates/work/test-plan.md: 102ca55a8c89241b36c27024744c46bbe3d4cbe5b0420ef8c2b83649b5a65713
-  .factory/verify.py: 5a355acf05b9f0344a7c37ded55e16688e9940cdd8387085af8bd8d744c50885
+  .factory/verify.py: 719cc6e86d4396aa450a30b62aab60ec5a927cfcf43e4499f5bd1e1cf5f66a44
   .github/skills/factory-dependencies/SKILL.md: 33f00d999ab9dc039fd782816c0e4d219787a7f0b4783283b2952310949c8d5c
   .github/skills/factory-diagnose/SKILL.md: ba371eae80a0e7d3f1880f326ec18f4bcf21a804b1de5abb7a8018c4bf751985
   .github/skills/factory-findings/SKILL.md: 5ba4c178663949251669bfad374b035c84424ce55055587362223470d56f6e86

@@ -47,21 +47,21 @@ None.
 
 2026-10-07. Tests were drafted first (`tests/test_decisions.py`, run red against the then-missing commands and text), but
 `verify.py`'s validator was written before them, so it is covered by the mutations below rather than by a red run.
-Full suite after the change: 729 passed, 1 skipped (the symlink test, no symlink rights on this Windows machine).
+Full suite after the change and after the Sonar-driven refactor (PR scan: S3776 complexity, S3516, S5713, S3358 fixed): 729 passed, 2 skipped (the registry and the new record symlink tests, no symlink rights on this Windows machine). Mutation line numbers are from the final code; the run was repeated after the refactor, same results.
 Deliberate breaks, each restored afterwards (`git diff` shows only the intended change); tests run:
 `tests/test_decisions.py tests/test_findings.py tests/test_lint.py`.
 
 | Mutation | Result |
 |----------|--------|
-| M1 `verify.py:429` accepted no longer requires by/at (`status in ("rejected",)`) | killed: `test_validator_rejects[accepted without by]` |
-| M2 `verify.py:449` delegated charter/dismissal check disabled (`if False and ...`) | killed: `test_validator_rejects[delegated charter]` |
-| M3 `verify.py:477` subject sha check always passes | killed: `test_validator_rejects[accepted subject without sha]` |
-| M4 `decisions.py:266` non-terminal check removed (agent shell path) | killed: `test_decide_without_yes_on_a_non_terminal_is_refused` |
-| M5 `decisions.py:233` status check removed (decide an accepted record) | killed: `test_decide_refuses_a_record_that_is_not_proposed[accepted]` |
-| M6 `decisions.py:235` placeholder check removed | killed: `test_decide_refuses_templates_and_placeholders[the unfilled-marker line]` |
-| M7 `decisions.py:298` delegation refusal for charter/dismissal removed | killed: `test_delegated_is_refused_for_never_delegated_types[charter]` |
-| M8 `decisions.py:289` accept/reject exclusivity removed | killed: `test_decide_function_refuses_both_or_neither` |
-| M9 `decisions.py:164` status lists every record, not only waiting ones | killed: `test_status_lists_waiting_records` |
+| M1 `verify.py:443` accepted no longer requires by/at (`status in ("rejected",)`) | killed: `test_validator_rejects[accepted without by]` |
+| M2 `verify.py:469` delegated charter/dismissal check disabled (`if False and ...`) | killed: `test_validator_rejects[delegated charter]` |
+| M3 `verify.py:499` subject sha check always passes | killed: `test_validator_rejects[accepted subject without sha]` |
+| M4 `decisions.py:277` non-terminal check removed (agent shell path) | killed: `test_decide_without_yes_on_a_non_terminal_is_refused` |
+| M5 `decisions.py:244` status check removed (decide an accepted record) | killed: `test_decide_refuses_a_record_that_is_not_proposed[accepted]` |
+| M6 `decisions.py:246` placeholder check removed | killed: `test_decide_refuses_templates_and_placeholders[the unfilled-marker line]` |
+| M7 `decisions.py:300` delegation refusal for charter/dismissal removed | killed: `test_delegated_is_refused_for_never_delegated_types[charter]` |
+| M8 `decisions.py:287` accept/reject exclusivity removed | killed: `test_decide_function_refuses_both_or_neither` |
+| M9 `decisions.py:166` status lists every record, not only waiting ones | killed: `test_status_lists_waiting_records` |
 | M10 `checks.py:60` lint rule back to `factory approve` only | killed: `test_decide_instruction_fails[Run ...]` |
 | M11 skill/policy text: `No accepted record, no call.` reworded | killed: `test_skill_routes_dismissals_through_a_decision_record` |
 | M12 `decisions.py:108` symlink containment removed | survives locally: the test needs symlink rights (skipped on this machine); runs on Linux CI |

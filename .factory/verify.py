@@ -362,24 +362,40 @@ def _text(value: object) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
-def _decision_basics(meta: dict, filename: str) -> list[str]:
-    problems: list[str] = []
-    for key in ("id", "type", "title", "status", "proposed_by", "proposed_at"):
-        if meta.get(key) in (None, ""):
-            problems.append(f"missing required field '{key}'")
+def decision_option_texts(meta: dict) -> list[str]:
+    """The text of every well-formed option, in order."""
+    options = meta.get("options")
+    if not isinstance(options, list):
+        return []
+    return [o["text"] for o in options if isinstance(o, dict) and _text(o.get("text"))]
+
+
+def _decision_identity(meta: dict, filename: str) -> list[str]:
+    problems = [
+        f"missing required field '{key}'"
+        for key in ("id", "type", "title", "status", "proposed_by", "proposed_at")
+        if meta.get(key) in (None, "")
+    ]
     did = meta.get("id")
-    if did not in (None, ""):
-        if not isinstance(did, str) or not DECISION_ID_RE.match(did):
-            problems.append(f"id {did!r} is not D-<number>")
-        elif not filename.startswith(f"{did}-"):
-            problems.append(f"id {did!r} does not match file name {filename!r}")
+    if did in (None, ""):
+        pass
+    elif not isinstance(did, str) or not DECISION_ID_RE.match(did):
+        problems.append(f"id {did!r} is not D-<number>")
+    elif not filename.startswith(f"{did}-"):
+        problems.append(f"id {did!r} does not match file name {filename!r}")
     for key, allowed in (("type", DECISION_TYPES), ("status", DECISION_STATUSES)):
         val = meta.get(key)
         if val not in (None, "") and val not in allowed:
             problems.append(f"{key} {val!r} is not one of {', '.join(allowed)}")
-    for key in ("title", "proposed_by"):
-        if meta.get(key) not in (None, "") and not _text(meta.get(key)):
-            problems.append(f"{key} must be a non-empty string")
+    return problems
+
+
+def _decision_scalars(meta: dict) -> list[str]:
+    problems = [
+        f"{key} must be a non-empty string"
+        for key in ("title", "proposed_by")
+        if meta.get(key) not in (None, "") and not _text(meta.get(key))
+    ]
     proposed_at = meta.get("proposed_at")
     if proposed_at not in (None, "") and not (
         isinstance(proposed_at, str) and _DATE_RE.match(proposed_at)
@@ -391,18 +407,8 @@ def _decision_basics(meta: dict, filename: str) -> list[str]:
     return problems
 
 
-def decision_option_texts(meta: dict) -> list[str]:
-    """The text of every well-formed option, in order."""
-    options = meta.get("options")
-    if not isinstance(options, list):
-        return []
-    return [o["text"] for o in options if isinstance(o, dict) and _text(o.get("text"))]
-
-
-def _decision_options(meta: dict) -> list[str]:
-    options = meta.get("options")
-    if not isinstance(options, list) or not options:
-        return ["options must be a non-empty list"]
+def _option_problems(options: list) -> tuple[list[str], int]:
+    """(problems, number recommended) of the `options` list entries."""
     problems: list[str] = []
     recommended = 0
     for i, opt in enumerate(options, 1):
@@ -412,6 +418,14 @@ def _decision_options(meta: dict) -> list[str]:
             problems.append(f"options[{i}].recommended must be true or false")
         elif opt.get("recommended"):
             recommended += 1
+    return problems, recommended
+
+
+def _decision_options(meta: dict) -> list[str]:
+    options = meta.get("options")
+    if not isinstance(options, list) or not options:
+        return ["options must be a non-empty list"]
+    problems, recommended = _option_problems(options)
     texts = decision_option_texts(meta)
     if len(set(texts)) != len(texts):
         problems.append("option texts must be distinct")
@@ -423,7 +437,7 @@ def _decision_options(meta: dict) -> list[str]:
 
 
 def _decision_answer(meta: dict) -> list[str]:
-    """The owner's answer: by/at/decision must fit the status, and a delegation must be honest."""
+    """The owner's answer: by/at/decision must fit the status."""
     status, by, at = meta.get("status"), meta.get("by"), meta.get("at")
     problems: list[str] = []
     if status in ("accepted", "rejected"):
@@ -441,7 +455,13 @@ def _decision_answer(meta: dict) -> list[str]:
             for key in ("by", "at")
             if meta.get(key) not in (None, "")
         )
-    delegated = meta.get("delegated", False)
+    return problems
+
+
+def _decision_delegation(meta: dict) -> list[str]:
+    """A delegation must be honest, and is never allowed for a charter or a dismissal."""
+    problems: list[str] = []
+    delegated, by = meta.get("delegated", False), meta.get("by")
     if not isinstance(delegated, bool):
         problems.append("delegated must be true or false")
     elif delegated and not (isinstance(by, str) and by.endswith(DELEGATED_SUFFIX)):
@@ -459,37 +479,45 @@ def _decision_type_fields(meta: dict) -> list[str]:
             problems.append("a dismissal needs 'alert': the alert URL (http or https)")
         if meta.get("reason") not in DISMISSAL_REASONS:
             problems.append(f"a dismissal needs 'reason', one of {', '.join(DISMISSAL_REASONS)}")
+    superseded_by = meta.get("superseded_by")
     if meta.get("status") == "superseded" and not (
-        isinstance(meta.get("superseded_by"), str) and DECISION_ID_RE.match(meta["superseded_by"])
+        isinstance(superseded_by, str) and DECISION_ID_RE.match(superseded_by)
     ):
         problems.append("status is superseded but 'superseded_by' is not a D-<number>")
-    subject = meta.get("subject")
-    if subject is not None:
-        parts = str(subject).replace("\\", "/").split("/")
-        if (
-            not _text(subject)
-            or parts[0] == ""
-            or ".." in parts
-            or re.match(r"^[A-Za-z]:", parts[0])
-        ):
-            problems.append("subject must be a path inside the project (no '..', not absolute)")
-        elif meta.get("status") == "accepted" and not _SHA_RE.match(
-            str(meta.get("subject_sha256") or "")
-        ):
-            problems.append("status is accepted but 'subject_sha256' is not a sha256 hex digest")
     return problems
+
+
+def _decision_subject(meta: dict) -> list[str]:
+    subject = meta.get("subject")
+    if subject is None:
+        return []
+    parts = str(subject).replace("\\", "/").split("/")
+    escapes = parts[0] == "" or ".." in parts or re.match(r"^[A-Za-z]:", parts[0])
+    if not _text(subject) or escapes:
+        return ["subject must be a path inside the project (no '..', not absolute)"]
+    digest = str(meta.get("subject_sha256") or "")
+    if meta.get("status") == "accepted" and not _SHA_RE.match(digest):
+        return ["status is accepted but 'subject_sha256' is not a sha256 hex digest"]
+    return []
 
 
 def validate_decision(meta: dict, filename: str) -> list[str]:
     """Schema check of one decision record's front matter. Empty list means valid. Pure."""
     if not isinstance(meta, dict):
         return ["front matter must be a YAML mapping"]
-    return (
-        _decision_basics(meta, filename)
-        + _decision_options(meta)
-        + _decision_answer(meta)
-        + _decision_type_fields(meta)
-    )
+    return [
+        problem
+        for check in (
+            lambda m: _decision_identity(m, filename),
+            _decision_scalars,
+            _decision_options,
+            _decision_answer,
+            _decision_delegation,
+            _decision_type_fields,
+            _decision_subject,
+        )
+        for problem in check(meta)
+    ]
 
 
 def check_decisions(root: Path | str) -> list[str]:
@@ -510,7 +538,7 @@ def check_decisions(root: Path | str) -> list[str]:
         seen.setdefault(did, path.name)
         try:
             meta, _ = load_decision(path)
-        except (ValueError, OSError, UnicodeDecodeError) as e:
+        except (ValueError, OSError) as e:
             problems.append(f"{did}: {path.name}: {e}")
             continue
         problems.extend(f"{did}: {p}" for p in validate_decision(meta, path.name))

@@ -90,7 +90,7 @@ def _read_record(path: Path, did: str) -> Record:
     try:
         text = common.normalise_newlines(path.read_text(encoding="utf-8-sig"))
         meta, body = split_front_matter(text)
-    except (ValueError, OSError, UnicodeDecodeError) as e:
+    except (ValueError, OSError) as e:
         return Record(path, did, "", {}, "", (str(e),))
     return Record(path, did, text, meta, body, tuple(validate_decision(meta, path.name)))
 
@@ -136,7 +136,9 @@ def age_days(rec: Record, today: date) -> int:
 
 
 def age_text(days: int) -> str:
-    return "today" if days == 0 else f"{days} day" + ("" if days == 1 else "s")
+    if days == 0:
+        return "today"
+    return f"{days} day" + ("" if days == 1 else "s")
 
 
 def _count(n: int, noun: str) -> str:
@@ -175,47 +177,56 @@ def inbox_lines(records: list[Record], today: date) -> list[str]:
 # --- inbox across projects ---------------------------------------------------------------------
 
 
-def cmd_inbox(today: date | None = None) -> int:
+def _scan(name: str, path: str | None) -> tuple[list[Record], list[str], str | None]:
+    """(waiting records, invalid labels, skipped note) of one registered project."""
+    if not path:
+        return [], [], f"{name} (no local path registered)"
+    if not os.path.isdir(path):
+        return [], [], f"{name} (path not found)"
+    records = load_records(path)
+    invalid = [f"{name} {r.id}" for r in records if r.problems]
+    return [r for r in records if r.waiting], invalid, None
+
+
+def inbox_report(projects: dict[str, str | None], today: date) -> list[str]:
+    """The lines `factory inbox` prints for a registry: waiting records grouped by project name."""
+    per_project: list[tuple[str, list[Record]]] = []
+    skipped: list[str] = []
+    invalid: list[str] = []
+    for name in sorted(projects):
+        waiting, bad, skip = _scan(name, projects[name])
+        invalid += bad
+        if skip:
+            skipped.append(skip)
+        if waiting:
+            per_project.append((name, waiting))
+    total = sum(len(w) for _, w in per_project)
+    lines = ["inbox: nothing waiting for the owner"]
+    if total:
+        rows = iter(_rows([_cells(r, today) for _, w in per_project for r in w]))
+        lines = [f"inbox: {_count(total, 'decision')} waiting for the owner"]
+        for name, waiting in per_project:
+            lines.append(f"{name}:")
+            lines += [f"  {next(rows)}" for _ in waiting]
+        lines.append(
+            "for the owner: run `factory decide <id>` inside the project (never run by an agent)"
+        )
+    if invalid:
+        lines.append(f"invalid: {', '.join(invalid)} (`factory verify` in that project says why)")
+    if skipped:
+        lines.append(f"skipped: {', '.join(skipped)}")
+    return lines
+
+
+def cmd_inbox(today: date | None = None) -> None:
     """Waiting records of every registered project that has a local path. Read-only."""
     projects = installer.registry_projects()
     if projects is None:
         where = common.registry_path()
         print(f"inbox: no registry yet (`factory adopt` creates it; location: {where})")
-        return 0
-    today = today or today_date()
-    per_project: list[tuple[str, list[Record]]] = []
-    skipped: list[str] = []
-    invalid: list[str] = []
-    for name in sorted(projects):
-        path = projects[name]
-        if not path:
-            skipped.append(f"{name} (no local path registered)")
-        elif not os.path.isdir(path):
-            skipped.append(f"{name} (path not found)")
-        else:
-            records = load_records(path)
-            invalid += [f"{name} {r.id}" for r in records if r.problems]
-            waiting = [r for r in records if r.waiting]
-            if waiting:
-                per_project.append((name, waiting))
-    total = sum(len(w) for _, w in per_project)
-    if not total:
-        print("inbox: nothing waiting for the owner")
-    else:
-        rows = _rows([_cells(r, today) for _, w in per_project for r in w])
-        print(f"inbox: {_count(total, 'decision')} waiting for the owner")
-        at = 0
-        for name, waiting in per_project:
-            print(f"{name}:")
-            for row in rows[at : at + len(waiting)]:
-                print(f"  {row}")
-            at += len(waiting)
-        print("for the owner: run `factory decide <id>` inside the project (never run by an agent)")
-    if invalid:
-        print(f"invalid: {', '.join(invalid)} (`factory verify` in that project says why)")
-    if skipped:
-        print(f"skipped: {', '.join(skipped)}")
-    return 0
+        return
+    for line in inbox_report(projects, today or today_date()):
+        print(line)
 
 
 # --- writing -----------------------------------------------------------------------------------
@@ -272,6 +283,41 @@ def _confirm(prompt: str, yes: bool) -> bool:
     return True
 
 
+def _check_arguments(accept: bool, reject: bool, option: int | None, delegated: str | None) -> None:
+    if accept == reject:
+        raise FactoryError("decide needs exactly one of --accept or --reject")
+    if option is not None and not accept:
+        raise FactoryError("--option only applies to --accept")
+    if delegated is not None and not delegated.strip():
+        raise FactoryError("--delegated needs the name of whoever delegated this decision")
+
+
+def _answerer(root: Path, rec: Record, delegated: str | None) -> str:
+    """Who the record is stamped with: the git user, or the delegated form (never for a charter
+    or a dismissal)."""
+    if delegated is None:
+        return common.git_user_name(root)
+    if rec.type in NEVER_DELEGATED:
+        raise FactoryError(
+            f"{rec.id}: a {rec.type} decision is never delegated to an agent; "
+            "the owner runs `factory decide` themself"
+        )
+    return f"{delegated.strip()}{DELEGATED_SUFFIX}"
+
+
+def _answered(rec: Record, accept: bool, chosen: str | None, who: str, **extra) -> dict:
+    meta = dict(rec.meta)
+    meta.update(
+        status="accepted" if accept else "rejected",
+        decision=chosen,
+        by=who,
+        at=common.today(),
+        delegated=who.endswith(DELEGATED_SUFFIX),
+    )
+    meta.update(extra)
+    return meta
+
+
 def cmd_decide(
     ident: str,
     *,
@@ -286,44 +332,21 @@ def cmd_decide(
     """Answer a proposed record like `approve` answers a spec: stamp who and when, change nothing
     else. Run by the owner (or, for a design or other record, under an explicit recorded
     delegation); never by an agent on its own."""
-    if accept == reject:
-        raise FactoryError("decide needs exactly one of --accept or --reject")
-    if option is not None and not accept:
-        raise FactoryError("--option only applies to --accept")
-    if delegated is not None and not delegated.strip():
-        raise FactoryError("--delegated needs the name of whoever delegated this decision")
+    _check_arguments(accept, reject, option, delegated)
     root = common.find_project_root(start)
     rec = find_record(root, ident)
     _check_decidable(rec)
-    if delegated is not None and rec.type in NEVER_DELEGATED:
-        raise FactoryError(
-            f"{rec.id}: a {rec.type} decision is never delegated to an agent; "
-            "the owner runs `factory decide` themself"
-        )
+    who = _answerer(root, rec, delegated)
     chosen = _choose_option(rec, option) if accept else None
     extra = _subject_digest(root, rec) if accept else {}
-    who = (
-        f"{delegated.strip()}{DELEGATED_SUFFIX}"
-        if delegated is not None
-        else common.git_user_name(root)
-    )
+    if note and note.strip():
+        extra["note"] = note.strip()
     verb = "Accept" if accept else "Reject"
     shown = f" with '{common.ascii_line(chosen, TEXT_MAX)}'" if chosen else ""
-    if not _confirm(
-        f"{verb} {rec.id} '{common.ascii_line(rec.title, TEXT_MAX)}'{shown} as {who}? [y/N] ", yes
-    ):
+    title = common.ascii_line(rec.title, TEXT_MAX)
+    if not _confirm(f"{verb} {rec.id} '{title}'{shown} as {who}? [y/N] ", yes):
         return 1
-    meta = dict(rec.meta)
-    meta.update(
-        status="accepted" if accept else "rejected",
-        decision=chosen,
-        by=who,
-        at=common.today(),
-        delegated=delegated is not None,
-    )
-    if note and note.strip():
-        meta["note"] = note.strip()
-    meta.update(extra)
+    meta = _answered(rec, accept, chosen, who, **extra)
     rec.path.write_text(render_record(meta, rec.body), encoding="utf-8", newline="\n")
     print(
         f"{rec.id}: {meta['status']} by {who} on {meta['at']}" + (f" ({chosen})" if chosen else "")

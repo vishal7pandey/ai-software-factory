@@ -687,7 +687,7 @@ def test_inbox_aggregates_registered_projects(tmp_path, monkeypatch, capsys):
         {"beta": beta, "alpha": alpha, "gamma": None, "delta": tmp_path / "gone"},
     )
     snap = {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
-    assert decisions.cmd_inbox() == 0
+    decisions.cmd_inbox()
     assert capsys.readouterr().out.splitlines() == [
         "inbox: 3 decisions waiting for the owner",
         "alpha:",
