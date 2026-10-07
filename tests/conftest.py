@@ -64,5 +64,5 @@ def no_real_gh(monkeypatch):
 def no_real_sonarcloud(monkeypatch):
     """`doctor` reads the public SonarCloud API through `sonar.http_get`, whose one network call is
     `sonar._request`. The suite never reaches the network: it answers "unreachable" (FACT-40).
-    A test that wants SonarCloud answers passes its own `fetch` or monkeypatches `sonar.http_get`."""
+    A test that wants SonarCloud answers passes its own `fetch` or patches `sonar.http_get`."""
     monkeypatch.setattr(sonar, "_request", lambda url: (0, ""))

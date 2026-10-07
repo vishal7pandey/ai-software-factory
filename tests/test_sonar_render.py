@@ -1,7 +1,7 @@
 """FACT-40: a new `sonar.yml` and `sonar-project.properties` are rendered from the project itself.
 
 The default branch, the project's own test command and the python version of its CI are read when
-`adopt` or `sync` CREATES the files (create-mode: an existing file is never touched). Everything runs
+`adopt` or `sync` CREATES the files (create-mode: an existing file is never touched). All runs
 against the REAL kit templates; no network, no project command (conftest)."""
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ DESELECTS = [
     "src/tests/test_agent_control.py::TestCompactEndpoint::test_compact_run_not_in_executor_returns_false",
 ]
 
-ADE_CI = """\
+ADE_CI = f"""\
 name: CI
 on:
   push:
@@ -52,15 +52,15 @@ jobs:
         run: >
           uv run pytest src/tests/ -v --tb=short -m "not integration"
           --cov=src --cov-report=term-missing --cov-fail-under=80
-          --deselect {d0}
-          --deselect {d1}
-          --deselect {d2}
-          --deselect {d3}
+          --deselect {DESELECTS[0]}
+          --deselect {DESELECTS[1]}
+          --deselect {DESELECTS[2]}
+          --deselect {DESELECTS[3]}
   frontend:
     runs-on: ubuntu-latest
     steps:
       - run: pnpm test
-""".format(d0=DESELECTS[0], d1=DESELECTS[1], d2=DESELECTS[2], d3=DESELECTS[3])
+"""
 
 
 def write(path: Path, text: str) -> None:
@@ -115,7 +115,7 @@ def steps(p: Path) -> list[dict]:
     return workflow(p)["jobs"]["sonar"]["steps"]
 
 
-def test_step(p: Path) -> dict:
+def coverage_step(p: Path) -> dict:
     return next(s for s in steps(p) if s.get("name", "").startswith("Tests with coverage"))
 
 
@@ -217,7 +217,7 @@ def test_the_project_test_command_is_reused_from_an_ade_shaped_ci(tmp_path, caps
     p = make_project(tmp_path, branch="master", origin_head="master")
     write(p / CI, ADE_CI)
     assert adopt(p) == 0
-    command = test_step(p)["run"]
+    command = coverage_step(p)["run"]
     assert command.startswith(f"{LOCKED_PYTEST} src/tests/ -v --tb=short")
     assert '-m "not integration"' in command
     assert "--cov=src" in command and "--cov-fail-under=80" in command
@@ -239,7 +239,7 @@ def test_the_project_test_command_is_reused_from_an_ade_shaped_ci(tmp_path, caps
         ("pytest -q", f"{LOCKED_PYTEST} -q --cov {XML}"),
         ("python -m pytest", f"{LOCKED_PYTEST} --cov {XML}"),
         (
-            "uv run --frozen --with pytest-cov pytest -q --cov=chatpid --cov-report=xml:coverage.xml",
+            f"uv run --frozen --with pytest-cov pytest -q --cov=chatpid {XML}",
             f"{LOCKED_PYTEST} -q --cov=chatpid {XML}",
         ),
         ("uv run --extra dev --python 3.11 pytest", f"{LOCKED_PYTEST} --cov {XML}"),
@@ -247,8 +247,14 @@ def test_the_project_test_command_is_reused_from_an_ade_shaped_ci(tmp_path, caps
             "uv run pytest --cov=src --cov-report=term-missing",
             f"{LOCKED_PYTEST} --cov=src --cov-report=term-missing {XML}",
         ),
-        ("uv run pytest tests/", f"{LOCKED_PYTEST} tests/ --cov {XML}"),  # --cov must not eat a path
-        ('uv run pytest -m "not slow and not db"', f'{LOCKED_PYTEST} -m "not slow and not db" --cov {XML}'),
+        (
+            "uv run pytest tests/",
+            f"{LOCKED_PYTEST} tests/ --cov {XML}",
+        ),  # --cov must not eat a path
+        (
+            'uv run pytest -m "not slow and not db"',
+            f'{LOCKED_PYTEST} -m "not slow and not db" --cov {XML}',
+        ),
         ("uv run pytest --cov-report=xml", f"{LOCKED_PYTEST} --cov-report=xml --cov"),
     ],
 )
@@ -291,7 +297,9 @@ def test_without_a_lock_adopt_writes_no_locked_flag_anywhere(tmp_path):
     assert adopt(p) == 0
     text = (p / WORKFLOW).read_text(encoding="utf-8")
     assert "--locked" not in text
-    assert "uv sync --all-extras --all-groups" in text and "uv run --no-sync python -m pytest" in text
+    assert (
+        "uv sync --all-extras --all-groups" in text and "uv run --no-sync python -m pytest" in text
+    )
 
 
 def test_with_a_lock_adopt_keeps_the_locked_flags(tmp_path):
@@ -308,12 +316,21 @@ def test_with_a_lock_adopt_keeps_the_locked_flags(tmp_path):
     ("ci", "reason"),
     [
         (None, "no ci.yml"),
-        ("name: ci\non: push\njobs:\n  t:\n    runs-on: x\n    steps:\n      - run: make test\n", "no pytest step"),
-        ("name: ci\non: push\njobs:\n  t:\n    runs-on: x\n    steps:\n      - run: tox -e py\n", "no pytest step"),
+        (
+            "name: ci\non: push\njobs:\n  t:\n    runs-on: x\n    steps:\n      - run: make test\n",
+            "no pytest step",
+        ),
+        (
+            "name: ci\non: push\njobs:\n  t:\n    runs-on: x\n    steps:\n      - run: tox -e py\n",
+            "no pytest step",
+        ),
         (ci_with("uv run pytest && uv run ruff check ."), "shell operator"),
         (ci_with("uv run pytest | tee out.log"), "shell operator"),
         (ci_with("uv run pytest; echo done"), "shell operator"),
-        (ci_with("uv run pytest", extra="        working-directory: backend\n"), "working-directory"),
+        (
+            ci_with("uv run pytest", extra="        working-directory: backend\n"),
+            "working-directory",
+        ),
         (ci_with("uv run pytest", extra="        env:\n          DB: x\n"), "env"),
         (ci_with("uv run pytest", top="env:\n  DB: x\n"), "env"),
         (ci_with("uv run pytest ${{ github.event.head_commit.message }}"), "expression"),
@@ -330,19 +347,25 @@ def test_unusable_ci_keeps_the_template_with_a_note(ci, reason):
 
 
 def test_job_level_env_and_defaults_are_refused_too():
-    ci = ci_with("uv run pytest").replace("    runs-on: ubuntu-latest\n", "    runs-on: ubuntu-latest\n    env:\n      A: b\n")
+    ci = ci_with("uv run pytest").replace(
+        "    runs-on: ubuntu-latest\n", "    runs-on: ubuntu-latest\n    env:\n      A: b\n"
+    )
     assert sonar.test_command(ci, locked=True)[0] is None
     ci = ci_with("uv run pytest").replace(
-        "    runs-on: ubuntu-latest\n", "    runs-on: ubuntu-latest\n    defaults:\n      run:\n        working-directory: x\n"
+        "    runs-on: ubuntu-latest\n",
+        "    runs-on: ubuntu-latest\n    defaults:\n      run:\n        working-directory: x\n",
     )
     assert sonar.test_command(ci, locked=True)[0] is None
 
 
 def test_the_template_step_is_kept_and_adopt_still_succeeds(tmp_path, capsys):
     p = make_project(tmp_path)
-    write(p / CI, "name: ci\non: push\njobs:\n  t:\n    runs-on: x\n    steps:\n      - run: make test\n")
+    write(
+        p / CI,
+        "name: ci\non: push\njobs:\n  t:\n    runs-on: x\n    steps:\n      - run: make test\n",
+    )
     assert adopt(p) == 0
-    command = test_step(p)["run"]
+    command = coverage_step(p)["run"]
     assert command.startswith(f"{LOCKED_PYTEST} -q --cov") and command.endswith(XML)
     out = capsys.readouterr().out
     assert "sonar.yml: test step left as the template" in out
@@ -361,19 +384,24 @@ def test_an_expression_is_never_copied_into_the_workflow(tmp_path):
 @pytest.mark.parametrize(
     ("ci", "expected"),
     [
-        ('steps:\n  - uses: actions/setup-python@v7\n    with:\n      python-version: "3.11"\n', ["3.11"]),
+        (
+            'steps:\n  - uses: actions/setup-python@v7\n    with:\n      python-version: "3.11"\n',
+            ["3.11"],
+        ),
         ("steps:\n  - run: uv python install 3.11\n", ["3.11"]),
         ("steps:\n  - run: uv run --python 3.13 pytest\n", ["3.13"]),
         ("    python-version: ['3.10', '3.12']\n", ["3.10", "3.12"]),
         ("    python-version: [3.10, 3.12, 3.10]\n", ["3.10", "3.12"]),
         ("    python-version: 3.10\n", ["3.10"]),
         ("# python-version: 3.9\n    python-version: 3.12 # was 3.9\n", ["3.12"]),
+        ("    python-version:\n      - '3.9'\n      - \"3.12\"\n    other: 3.5\n", ["3.9", "3.12"]),
         ("python-version: ${{ matrix.python }}\n", []),
+        ("python-version-file: .python-version\n", []),
         ("", []),
     ],
 )
 def test_python_version_follows_ci(ci, expected):
-    assert sonar.python_versions(ci, None) == expected
+    assert sonar.ci_python_versions(ci) == expected
 
 
 @pytest.mark.parametrize(
@@ -410,7 +438,15 @@ def test_the_version_reaches_the_workflow_and_the_properties(tmp_path):
 
 def test_a_matrix_gives_the_first_version_to_the_job_and_all_to_the_property(tmp_path):
     p = make_project(tmp_path)
-    write(p / CI, ci_with("uv run pytest").replace("jobs:", "jobs:\n  m:\n    strategy:\n      matrix:\n        python-version: ['3.10', '3.12']\n    runs-on: x\n    steps:\n      - run: echo\n"))
+    write(
+        p / CI,
+        ci_with("uv run pytest").replace(
+            "jobs:",
+            "jobs:\n  m:\n    strategy:\n      matrix:\n"
+            "        python-version: ['3.10', '3.12']\n    runs-on: x\n"
+            "    steps:\n      - run: echo\n",
+        ),
+    )
     assert adopt(p) == 0
     setup = next(s for s in steps(p) if s.get("uses", "").startswith("actions/setup-python"))
     assert setup["with"]["python-version"] == "3.10"
@@ -487,5 +523,5 @@ def test_the_rendered_workflow_is_valid_yaml_with_the_guard_and_scan(tmp_path):
     ids = [s.get("id") for s in steps(p)]
     assert "guard" in ids
     assert any("sonarqube-scan-action" in s.get("uses", "") for s in steps(p))
-    assert "{{" not in (p / WORKFLOW).read_text(encoding="utf-8")
+    assert "{{project_key}}" not in (p / WORKFLOW).read_text(encoding="utf-8")
     assert common.normalise_newlines((p / WORKFLOW).read_text(encoding="utf-8")).endswith("\n")

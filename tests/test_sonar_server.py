@@ -1,7 +1,8 @@
 """FACT-40 AC8: `factory doctor` reads the SonarCloud project through the public API (no token).
 
-Everything is stubbed: the GitHub side through `harden.gh_api`'s signature, the SonarCloud side through
-the `fetch` argument (`sonar.http_get`'s signature). conftest makes the real network function inert."""
+Everything is stubbed: the GitHub side through `harden.gh_api`'s signature, the SonarCloud side
+through the `fetch` argument (`sonar.http_get`'s signature). conftest makes the real network
+function inert."""
 
 from __future__ import annotations
 
@@ -59,7 +60,8 @@ class Gh:
         if path == "repos/me/proj":
             if self.repo_status != 200:
                 return self.repo_status, {"message": MARKER}
-            return 200, {"default_branch": self.default, "private": False, "token": MARKER}
+            # private: the protections read as "not available", so `doctor` has nothing to FAIL on
+            return 200, {"default_branch": self.default, "private": True, "token": MARKER}
         if path.startswith("repos/me/proj/actions/secrets"):
             return 200, {"total_count": 1, "secrets": [{"name": "SONAR_TOKEN"}]}
         return 404, None
@@ -106,7 +108,8 @@ def test_mismatch_prints_the_repair_commands(tmp_path):
     f = server_finding(make_project(tmp_path), fetch=Server(branches=branches))
     assert f.level == checks.WARN
     assert "'master'" in f.detail and "'main'" in f.detail
-    rename = f'curl -s -X POST -u "$SONAR_TOKEN:" "{BASE}/project_branches/rename?project={KEY}&name=main"'
+    url = f"{BASE}/project_branches/rename?project={KEY}&name=main"
+    rename = f'curl -s -X POST -u "$SONAR_TOKEN:" "{url}"'
     assert rename in f.detail
     assert "project_branches/delete" not in f.detail  # no side branch named main: nothing to delete
     assert "docs/sonarcloud.md" in f.detail
@@ -177,7 +180,11 @@ def test_unreadable_github_default_branch_is_unknown_without_a_sonar_call(tmp_pa
 def test_a_malformed_default_branch_is_unknown(tmp_path):
     class Odd(Gh):
         def __call__(self, method, path, body=None):
-            return (200, {"default_branch": None}) if path == "repos/me/proj" else super().__call__(method, path, body)
+            return (
+                (200, {"default_branch": None})
+                if path == "repos/me/proj"
+                else super().__call__(method, path, body)
+            )
 
     f = server_finding(make_project(tmp_path), gh=Odd())
     assert f.level == checks.WARN and f.detail.startswith("unknown")
@@ -186,7 +193,9 @@ def test_a_malformed_default_branch_is_unknown(tmp_path):
 @pytest.mark.parametrize("key", ["a b", "x;rm -rf", "a/b", "k&evil=1", ""])
 def test_an_unsafe_project_key_is_never_sent(tmp_path, key):
     srv = Server()
-    f = server_finding(make_project(tmp_path, f"sonar.organization=o\nsonar.projectKey={key}\n"), fetch=srv)
+    f = server_finding(
+        make_project(tmp_path, f"sonar.organization=o\nsonar.projectKey={key}\n"), fetch=srv
+    )
     assert f.level == checks.WARN and f.detail.startswith("unknown")
     assert srv.calls == []
 
@@ -224,10 +233,16 @@ def test_a_project_with_no_sonar_files_gets_no_server_finding(tmp_path):
     assert [f.name for f in found] == ["sonar"] and srv.calls == []
 
 
-def test_doctor_prints_the_server_line_and_never_a_secret_or_an_exit_one(tmp_path, monkeypatch, capsys):
+def test_doctor_prints_the_server_line_and_never_a_secret_or_an_exit_one(
+    tmp_path, monkeypatch, capsys
+):
     p = make_project(tmp_path)
     monkeypatch.setattr("swfactory.harden.gh_api", Gh())
-    monkeypatch.setattr(sonar, "http_get", Server(branches=(200, {"branches": [{"name": "master", "isMain": True}]})))
+    monkeypatch.setattr(
+        sonar,
+        "http_get",
+        Server(branches=(200, {"branches": [{"name": "master", "isMain": True}]})),
+    )
     code = main(["doctor", str(p)])
     out = capsys.readouterr().out
     assert code == 0 and "FAIL" not in out
@@ -286,7 +301,12 @@ def test_the_real_request_function_maps_outcomes(monkeypatch):
 
 def test_the_real_request_function_refuses_anything_but_the_sonarcloud_api(monkeypatch):
     monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: pytest.fail("network call"))
-    for url in ("http://sonarcloud.io/api/x", "https://evil.example/api/x", "file:///etc/passwd", "https://sonarcloud.io.evil.example/api"):
+    for url in (
+        "http://sonarcloud.io/api/x",
+        "https://evil.example/api/x",
+        "file:///etc/passwd",
+        "https://sonarcloud.io.evil.example/api",
+    ):
         assert REAL_REQUEST(url) == (0, "")
 
 

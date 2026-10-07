@@ -231,8 +231,8 @@ SHA_USES = re.compile(r"^\s*(?:- )?uses: (?P<action>[\w.-]+/[\w.-]+)@(?P<ref>\S+
 
 @pytest.mark.parametrize("stack", STACKS)
 def test_third_party_actions_are_pinned_to_a_commit_sha(stack):
-    """FACT-40 (Sonar githubactions:S7637): every action outside `actions/` is a full commit SHA with
-    its version in a trailing comment, so Dependabot can keep it current."""
+    """FACT-40 (Sonar githubactions:S7637): every action outside `actions/` is a full commit SHA
+    with its version in a trailing comment, so Dependabot can keep it current."""
     text = (ROOT / "kit" / "sonar" / f"{stack}.yml").read_text(encoding="utf-8")
     uses = [m for m in map(SHA_USES.match, text.splitlines()) if m]
     assert uses
@@ -646,8 +646,8 @@ def test_the_doc_states_the_public_project_and_main_branch_facts():
     assert "free plan" in text and "must be public" in text
     assert "succeeds" in text and "nothing can be read" in text
     assert "main branch" in text and "default branch" in text and "`master`" in text
-    delete = "curl -s -X POST -u \"$SONAR_TOKEN:\" \"https://sonarcloud.io/api/project_branches/delete?project="
-    rename = "curl -s -X POST -u \"$SONAR_TOKEN:\" \"https://sonarcloud.io/api/project_branches/rename?project="
+    delete = 'curl -s -X POST -u "$SONAR_TOKEN:" "https://sonarcloud.io/api/project_branches/delete?project='
+    rename = 'curl -s -X POST -u "$SONAR_TOKEN:" "https://sonarcloud.io/api/project_branches/rename?project='
     assert delete in text and rename in text
     assert text.index("project_branches/delete") < text.index("project_branches/rename")
     assert "sonar: server" in text  # doctor detects it
@@ -656,7 +656,9 @@ def test_the_doc_states_the_public_project_and_main_branch_facts():
 def test_the_doc_local_scan_recipe_uses_only_locked_dependencies():
     text = doc_text()
     assert "--with pytest-cov" not in text
-    assert "uv run --locked --no-sync python -m pytest" in text and "uv add --dev pytest-cov" in text
+    assert (
+        "uv run --locked --no-sync python -m pytest" in text and "uv add --dev pytest-cov" in text
+    )
 
 
 def test_security_policy_has_exactly_one_pointer_line():
