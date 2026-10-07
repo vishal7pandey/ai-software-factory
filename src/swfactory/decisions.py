@@ -20,6 +20,7 @@ from pathlib import Path
 from swfactory import common, installer
 from swfactory.common import FactoryError
 from swfactory.verify import (
+    CHARTER_PATH,
     CLARIFY,
     DECISION_FILE_RE,
     DECISION_KEYS,
@@ -337,6 +338,10 @@ def cmd_decide(
     rec = find_record(root, ident)
     _check_decidable(rec)
     who = _answerer(root, rec, delegated)
+    if accept and rec.type == "charter":
+        from swfactory import charter  # imported here: charter imports this module
+
+        charter.check_acceptable(root, rec)
     chosen = _choose_option(rec, option) if accept else None
     extra = _subject_digest(root, rec) if accept else {}
     if note and note.strip():
@@ -370,6 +375,10 @@ def _scaffold_options(dtype: str, alert: str | None, reason: str | None) -> list
     if dtype != "dismissal":
         if alert or reason:
             raise FactoryError("--alert and --reason only apply to --type dismissal")
+        if dtype == "charter":  # one option: the owner rejects it to send it back
+            return [
+                {"text": f"Approve the charter in {CHARTER_PATH} as written", "recommended": True}
+            ]
         return [
             {"text": "REPLACE_ME: the option you recommend", "recommended": True},
             {"text": "REPLACE_ME: the alternative"},
@@ -419,6 +428,8 @@ def cmd_new(
     if dtype == "dismissal":
         meta.update(alert=alert, reason=reason)
     meta.update(options=options, decision=None, by=None, at=None, delegated=False)
+    if dtype == "charter":
+        meta["subject"] = CHARTER_PATH
     body = _template_body().replace("{{title}}", meta["title"])
     base = os.path.realpath(root)
     target = os.path.realpath(os.path.join(base, DECISIONS_DIR, name))
@@ -434,4 +445,6 @@ def cmd_new(
         "Write the context, evidence and options, fix the options in the front matter, delete the "
         "unfilled line; then the owner answers with `factory decide " + did + "`."
     )
+    if dtype == "charter":
+        print(f"Name it in the charter: set `decision: {did}` in {CHARTER_PATH}.")
     return 0

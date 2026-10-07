@@ -443,7 +443,11 @@ def test_decide_function_refuses_both_or_neither(project):
 
 @pytest.mark.parametrize("dtype", ["charter", "dismissal"])
 def test_delegated_is_refused_for_never_delegated_types(project, dtype):
-    extra = {"alert": "https://x/1", "reason": "won't fix"} if dtype == "dismissal" else {}
+    extra = (
+        {"alert": "https://x/1", "reason": "won't fix"}
+        if dtype == "dismissal"
+        else {"subject": "docs/PROJECT.md"}
+    )
     path = put(project, type=dtype, **extra)
     before = path.read_bytes()
     with pytest.raises(FactoryError, match="never delegated to an agent"):

@@ -9,7 +9,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from swfactory import common, decisions, deps
+from swfactory import charter, common, decisions, deps
 from swfactory.common import FactoryError
 from swfactory.harden import Gh
 from swfactory.verify import (
@@ -298,6 +298,9 @@ def cmd_start(
         print(f"  {(item_dir / name).relative_to(root).as_posix()}")
     if not no_branch and common.is_git_repo(root):
         print(f"Branch: {item['branch']}")
+    warning = charter.maintenance_warning(root) if item_type == "feature" else None
+    if warning:
+        print(warning)
     print()
     prompt = print_handoff(item, item_dir, config)
     return launch_agent(run, prompt, root) if run else 0
@@ -347,6 +350,7 @@ def cmd_status(
     start: Path | str = ".",
     gh: Gh | None = None,
     now: datetime | None = None,
+    jira_status: charter.JiraStatus | None = None,
 ) -> int:
     """The work-item table, then (GitHub projects only) the read-only dependency summary of
     `swfactory.deps`. The summary never changes the exit code: what it cannot read prints
@@ -361,6 +365,11 @@ def cmd_status(
     if waiting:
         print()
         for line in waiting:
+            print(line)
+    charter_lines = charter.status_lines(root, jira_status)
+    if charter_lines:
+        print()
+        for line in charter_lines:
             print(line)
     summary = deps.for_project(root, gh, now)
     if summary is not None:

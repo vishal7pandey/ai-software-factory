@@ -64,6 +64,15 @@ with `by` and `at` (`factory verify` fails one without them).
   (delegated to agent)"`, `delegated: true`). An agent never infers it.
 * Like `approve`, `decide` is a ledger, not a lock: GitHub review on `docs/decisions/` is the lock.
 
+### The project charter
+
+`docs/PROJECT.md` (purpose, 3 to 7 measurable done criteria, non-goals, parked list, maintenance mode) is approved only
+through a `charter` decision, which is never delegated to an agent. The agent may draft or amend the file and propose
+the record; it never runs `factory decide`, never edits `decision:` to name a record the owner has not accepted, and
+never switches `mode:` to `maintenance` on its own. An edit after approval shows as `changed` in `factory doctor` and
+needs a new decision. New work is checked against the charter (`factory-spec`); in maintenance mode only security and
+dependency updates go ahead without a charter amendment.
+
 ## Supervised vs trusted
 
 * `supervised` (default): a human approves the **spec** and the **plan** before implementation.

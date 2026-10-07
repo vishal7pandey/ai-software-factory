@@ -77,6 +77,7 @@ ai-software-factory/
 │   ├── verify.py                  standalone copy of src/swfactory/verify.py (managed)
 │   ├── policies/*.md              (managed)
 │   └── templates/work/*.md        work-item doc templates; skills read them here (managed)
+├── docs/PROJECT.md                (create-if-absent) the project charter, a template until written (3.12)
 ├── docs/decisions/
 │   ├── TEMPLATE.md                (create-if-absent) example decision record (3.11)
 │   └── D-<n>-<slug>.md            decision records, written by agents, answered by the owner
@@ -252,9 +253,9 @@ through `gh` (3.8).
 | `doctor [path]` | `commands/doctor.py` | tools present (git, gh, uv, node, docker, claude); gh auth; for a project: drift/missing kit files, the four repo protections (3.8) and the SonarCloud setup lines (3.9); exits 1 when a protection is `off` on a public repo (a Sonar line never fails) |
 | `harden [path] [--dry-run]` | `commands/harden.py` → `swfactory/harden.py` | enable secret scanning + push protection, Dependabot alerts and security updates, CodeQL default setup on the project's GitHub repo (3.8) |
 | `lint` | `commands/lint.py` | validate skills + kit manifest in the factory repo |
-| `feature start <title> [--jira KEY] [--risk] [--no-branch] [--run AGENT]` | `commands/work.py` | scaffold work item + branch + handoff prompt |
+| `feature start <title> [--jira KEY] [--risk] [--no-branch] [--run AGENT]` | `commands/work.py` | scaffold work item + branch + handoff prompt; a feature in a charter maintenance mode prints a warning (3.12) |
 | `bug start <title> …` | `commands/work.py` | same, bug templates |
-| `status [--all]` | `commands/work.py` | table of work items: id, type, status, branch, next step; then the decisions waiting for the owner (3.11), then, for a github.com project, the read-only dependency summary (3.10) |
+| `status [--all]` | `commands/work.py` | table of work items: id, type, status, branch, next step; then the decisions waiting for the owner (3.11), then the charter progress (3.12), then, for a github.com project, the read-only dependency summary (3.10) |
 | `approve <id> spec\|plan [--yes] [--delegated WHO]` | `commands/work.py` | human gate ledger; `--delegated` records an owner-delegated approval (3.2) |
 | `decide <id> --accept [--option N] \| --reject [--note T] [--yes] [--delegated WHO]` | `commands/decide.py` → `swfactory/decisions.py` | the owner's answer to a decision record (3.11): stamps status, decision, `by`, `at`; never run by an agent |
 | `decision new <title> --type T [--jira KEY] [--alert URL --reason R] [--by NAME]` | `commands/decide.py` | scaffold a proposed, draft decision record from the kit template (next free `D-<n>`) |
@@ -374,6 +375,38 @@ the project's own repo, not a chat message. No tracker, no network.
   registry's projects that have a local path, reading their `docs/decisions` only (read-only, deterministic order).
 * **Findings.** A dismissal is a `dismissal` record; `factory-findings` applies it only when the record is `accepted`
   with `by` and `at`, and cites the id in Jira (`policies/findings.md`, Dismissal gate).
+
+### 3.12 Project charter (FACT-47)
+
+A project needs a written, owner-approved definition of done and a stop rule, or scope only grows.
+
+* **File.** `docs/PROJECT.md` (kit `kit/charter/PROJECT.md`, `create` mode: a template with the unfilled marker and
+  `REPLACE_ME` placeholders, never overwritten by `sync`, not tracked). Markdown with YAML front matter: `purpose`
+  (two sentences), `mode` (`active` | `maintenance`), `decision` (the `D-<n>` of the approving record, or null),
+  `done` (3 to 7 criteria `{id, text, check}`), `non_goals`, `parked` (`{item, jira}`), and a body with a
+  `## Maintenance mode` section: after done only security and dependency updates, through the findings and
+  dependency loops; any other change needs a charter amendment (a new charter decision).
+* **Measurable.** `check` has exactly one of `work: <id>` (met when that work item is `merged` or later; no such item
+  is `not met`), `file: <path>` (exists), `metric: {file, key, min|max|equals}` (the number at the dotted `key` of a
+  YAML or JSON file; an unreadable file or key is `unknown`), `jira: <KEY>` (met when an injected lookup says `Done`;
+  without one it is `unknown`: the factory has no Jira client). Paths resolve inside the project (`os.path.realpath`
+  plus a `startswith` guard). `validate_charter(meta, body)` (pure, `swfactory/charter.py`) rejects fewer than 3 or
+  more than 7 criteria, duplicate ids, a criterion without a valid `check`, vague phrases ("works well",
+  "user-friendly", "robust", ...), fewer than three words, an empty purpose or `non_goals`, a bad mode, a missing
+  maintenance section and a template.
+* **Approval.** Only through a `charter` decision record (3.11) with `subject: docs/PROJECT.md` (`validate_decision`
+  requires it). `decide --accept` refuses unless the file is a valid charter that names that record in `decision`,
+  then stamps `subject_sha256`. The charter is **approved** when `decision` names an accepted `charter` record whose
+  hash equals the current file (newlines normalised); an edit afterwards is `changed`; a missing, proposed, rejected,
+  superseded or invalid record is `unapproved`. Charter decisions are never delegated and never run by an agent.
+* **Visibility.** `doctor` gives one `charter` finding: OK when approved, else WARN `no approved charter: <why>` (never
+  FAIL). `status` prints, for an approved `active` charter, each criterion as `met`, `not met` or `unknown` with its
+  reference and the count, and when every one is met, "ready for maintenance mode": the owner sets `mode: maintenance`
+  and proposes a new charter decision; for `maintenance` it prints the stop rule; an unapproved existing charter
+  gets one line, and a project without the file prints nothing. `feature start` prints a warning in maintenance
+  mode and carries on (not a block, so the owner can proceed deliberately); `bug start` does not warn.
+* **Skills.** `factory-spec` checks proposed work against the charter (in scope, a done criterion, parked, or an
+  amendment); `factory-workflow` and `policies/autonomy.md` say who may change it.
 
 ## 4. Golden path
 

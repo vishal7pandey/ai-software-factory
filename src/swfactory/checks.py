@@ -18,6 +18,7 @@ from pathlib import Path
 import yaml
 
 from swfactory import __version__
+from swfactory import charter as _charter
 from swfactory import common as _common
 from swfactory import decisions as _decisions
 from swfactory import dependabot as _dependabot
@@ -561,6 +562,14 @@ def check_decisions(root: Path | str, today: date | None = None) -> list[Finding
             )
             out.append(Finding(WARN, name, detail))
     return out
+
+
+def check_charter(root: Path | str) -> list[Finding]:
+    """The project charter (FACT-47): OK when approved, else one WARN saying why. Never FAIL."""
+    st = _charter.charter_state(root)
+    if st.state == "approved":
+        return [Finding(OK, "charter", f"approved by {st.decision} ({st.mode})")]
+    return [Finding(WARN, "charter", f"no approved charter: {st.detail}")]
 
 
 SONAR_PLACEHOLDER = _installer.SONAR_PLACEHOLDER

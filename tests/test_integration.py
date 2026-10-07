@@ -48,7 +48,9 @@ def test_adopt_is_idempotent_and_doctor_is_clean(app, capsys):
     assert "up to date" in capsys.readouterr().out
     assert cli.main(["doctor", str(app)]) == 0
     out = capsys.readouterr().out
-    assert "FAIL" not in out and "WARN" not in out
+    # the only warning a fresh adopt leaves is the charter template, waiting to be written (FACT-47)
+    warns = [ln for ln in out.splitlines() if ln.startswith("WARN")]
+    assert "FAIL" not in out and len(warns) == 1 and "no approved charter" in warns[0]
 
 
 def test_every_installed_skill_and_policy_exists(app):

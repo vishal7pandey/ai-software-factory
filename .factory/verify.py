@@ -331,6 +331,7 @@ DECISION_KEYS = [
     "superseded_by",
 ]
 DECISIONS_DIR = "docs/decisions"
+CHARTER_PATH = "docs/PROJECT.md"  # the project charter a `charter` decision approves (FACT-47)
 DECISION_ID_RE = re.compile(r"^D-\d+$")
 DECISION_FILE_RE = re.compile(r"^(D-\d+)-.+\.md$")
 _SHA_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -483,16 +484,24 @@ def _decision_type_fields(meta: dict) -> list[str]:
         isinstance(superseded_by, str) and DECISION_ID_RE.match(superseded_by)
     ):
         problems.append("status is superseded but 'superseded_by' is not a D-<number>")
+    if meta.get("type") == "charter" and meta.get("subject") != CHARTER_PATH:
+        problems.append(f"a charter decision needs subject: {CHARTER_PATH}")
     return problems
+
+
+def is_project_path(value: object) -> bool:
+    """A relative path that stays inside the project: not absolute, no '..', not a drive."""
+    if not _text(value):
+        return False
+    parts = str(value).replace("\\", "/").split("/")
+    return not (parts[0] == "" or ".." in parts or re.match(r"^[A-Za-z]:", parts[0]))
 
 
 def _decision_subject(meta: dict) -> list[str]:
     subject = meta.get("subject")
     if subject is None:
         return []
-    parts = str(subject).replace("\\", "/").split("/")
-    escapes = parts[0] == "" or ".." in parts or re.match(r"^[A-Za-z]:", parts[0])
-    if not _text(subject) or escapes:
+    if not is_project_path(subject):
         return ["subject must be a path inside the project (no '..', not absolute)"]
     digest = str(meta.get("subject_sha256") or "")
     if meta.get("status") == "accepted" and not _SHA_RE.match(digest):

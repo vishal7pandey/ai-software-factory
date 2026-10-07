@@ -24,6 +24,8 @@ files:
   - {src: kit/work-README.md,               dest: docs/work/README.md,                  mode: create}
   # Owner decisions (FACT-46): an example record to copy; never overwritten, not a record itself.
   - {src: kit/decisions/TEMPLATE.md,        dest: docs/decisions/TEMPLATE.md,           mode: create}
+  # Project charter (FACT-47): a template to fill in; never overwritten, approved through a charter decision.
+  - {src: kit/charter/PROJECT.md,           dest: docs/PROJECT.md,                      mode: create}
 
 # Directories copied file-by-file, each file `managed`.
 dirs:
@@ -44,6 +46,7 @@ work_templates:   # resolved via the factory root by the CLI; in a project they 
 # Templates the CLI reads from the factory root (`factory decision new`, FACT-46).
 templates:
   decision: kit/decisions/TEMPLATE.md
+  charter: kit/charter/PROJECT.md
 
 # Per-ecosystem entries of `.github/dependabot.yml` (FACT-39). `{{updates}}` in the file above is replaced by one
 # rendered entry per ecosystem found in the project; `{{directory}}` and `{{ecosystem}}` are filled per entry.
