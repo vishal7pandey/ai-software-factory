@@ -9,7 +9,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from swfactory import common, deps
+from swfactory import common, decisions, deps
 from swfactory.common import FactoryError
 from swfactory.harden import Gh
 from swfactory.verify import (
@@ -357,6 +357,11 @@ def cmd_status(
         print("No work items." if show_all else "No open work items (use --all to include done).")
     else:
         print(format_table(rows))
+    waiting = decisions.inbox_lines(decisions.load_records(root), decisions.today_date())
+    if waiting:
+        print()
+        for line in waiting:
+            print(line)
     summary = deps.for_project(root, gh, now)
     if summary is not None:
         print()

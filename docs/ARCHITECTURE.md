@@ -77,6 +77,9 @@ ai-software-factory/
 │   ├── verify.py                  standalone copy of src/swfactory/verify.py (managed)
 │   ├── policies/*.md              (managed)
 │   └── templates/work/*.md        work-item doc templates; skills read them here (managed)
+├── docs/decisions/
+│   ├── TEMPLATE.md                (create-if-absent) example decision record (3.11)
+│   └── D-<n>-<slug>.md            decision records, written by agents, answered by the owner
 └── docs/work/
     ├── README.md                  (create-if-absent) explains the evidence convention
     └── <id>-<slug>/               one dir per work item (see 3.2)
@@ -178,6 +181,12 @@ pr: null                 # PR URL once opened
    `## Audit` section still holds only the template placeholder ⇒ `WARN <id>: <reason>` printed before
    the FAIL lines; the final line becomes `verify: OK (N warning(s))` when there are no problems, so an
    empty audit does not pass silently even though it does not block the merge.
+6. (FACT-46) Every `docs/decisions/D-<n>-<slug>.md` is a valid decision record (3.11): `validate_decision`, the same pure
+   function the CLI uses, lives in this file. `FAIL D-<n>: <reason>` for an accepted or rejected record without `by`/`at`,
+   an accepted `decision` that is not one of the options, a proposed record that already carries an answer, a delegated
+   record without the delegated wording or a delegated `charter`/`dismissal`, a `dismissal` without alert URL and an
+   allowed reason, an accepted `subject` without `subject_sha256`, a duplicate id. Other files in that folder (ADRs
+   `001-*.md`, `TEMPLATE.md`) are not records.
 
 ### 3.4 Skill format
 
@@ -186,7 +195,7 @@ pr: null                 # PR URL once opened
 with these H2 sections, in order: `## When to use`, `## Inputs`, `## Steps`, `## Output`,
 `## Definition of done`, `## Never`. Optional `references/` dir for long material.
 Rules: reference work-item paths and statuses exactly as in 3.2; never tell an agent to run
-`approve`; mention the CLI only as optional ("or edit `item.yaml` by hand"). `factory lint` enforces
+`approve` or `decide`; mention the CLI only as optional ("or edit `item.yaml` by hand"). `factory lint` enforces
 the mechanical parts, and that `factory-implement` keeps carrying the file-editing rule (editor tools,
 never inline scripts) and the explicit-staging rule (never `git add -A`).
 
@@ -245,8 +254,11 @@ through `gh` (3.8).
 | `lint` | `commands/lint.py` | validate skills + kit manifest in the factory repo |
 | `feature start <title> [--jira KEY] [--risk] [--no-branch] [--run AGENT]` | `commands/work.py` | scaffold work item + branch + handoff prompt |
 | `bug start <title> …` | `commands/work.py` | same, bug templates |
-| `status [--all]` | `commands/work.py` | table of work items: id, type, status, branch, next step; then, for a github.com project, the read-only dependency summary (3.10) |
+| `status [--all]` | `commands/work.py` | table of work items: id, type, status, branch, next step; then the decisions waiting for the owner (3.11), then, for a github.com project, the read-only dependency summary (3.10) |
 | `approve <id> spec\|plan [--yes] [--delegated WHO]` | `commands/work.py` | human gate ledger; `--delegated` records an owner-delegated approval (3.2) |
+| `decide <id> --accept [--option N] \| --reject [--note T] [--yes] [--delegated WHO]` | `commands/decide.py` → `swfactory/decisions.py` | the owner's answer to a decision record (3.11): stamps status, decision, `by`, `at`; never run by an agent |
+| `decision new <title> --type T [--jira KEY] [--alert URL --reason R] [--by NAME]` | `commands/decide.py` | scaffold a proposed, draft decision record from the kit template (next free `D-<n>`) |
+| `inbox` | `commands/decide.py` | decisions waiting for the owner in every registered project with a local path; read-only |
 | `advance <id> <status>` | `commands/work.py` | forward-only status moves |
 | `next <id> [--run claude\|copilot]` | `commands/work.py` | print (or launch) the prompt for the next step given status |
 | `verify [...]` | `commands/work.py` → `swfactory/verify.py` | the CI gate (3.3) |
@@ -330,6 +342,38 @@ How the agent sees open Dependabot alerts and PRs and acts on them. Nothing here
   nothing and makes no call.
 * **Weekly routine.** Documented in `policies/dependencies.md` (the harness `schedule` skill, per-project owner
   approval, off by default); the kit lays nothing that schedules it.
+
+### 3.11 Owner decisions (FACT-46)
+
+A choice that belongs to the owner (a design direction, a scanner-finding dismissal, a project charter) is a file in
+the project's own repo, not a chat message. No tracker, no network.
+
+* **Record.** `docs/decisions/D-<n>-<slug>.md`: Markdown with YAML front matter `id` (`D-<n>`, equals the file name
+  prefix), `type` (`dismissal` | `design` | `charter` | `other`), `title`, `status` (`proposed` | `accepted` |
+  `rejected` | `superseded`), `jira` (a link, or null), `proposed_by`, `proposed_at`, `options` (a list of
+  `{text, recommended}`; exactly one recommended while proposed), and the answer: `decision` (the chosen option's
+  text), `by`, `at`, `delegated`, `note`; optional `subject` (a project file the decision covers) with
+  `subject_sha256` stamped on accept; a `dismissal` also carries `alert` (URL) and `reason` (one of the three of
+  `policies/findings.md`); `superseded_by` when superseded. The body is context, evidence, options with consequences,
+  a recommendation. ADRs (`001-*.md`) and `TEMPLATE.md` in the same folder are not records.
+* **One validator.** `validate_decision(meta, filename)` is a pure function in `verify.py` (standalone; the CLI imports
+  it). `verify` rule 6 applies it to every record; `swfactory/decisions.py` reads records and answers them.
+* **Answering.** `factory decide <id> --accept [--option N] | --reject [--note T] [--yes] [--delegated WHO]` is a ledger
+  like `approve`: it refuses a record that is not `proposed`, is invalid, or still holds the unfilled line, a
+  clarification marker, `REPLACE_ME` or `{{`; stamps `by` (git user name, or `WHO (delegated to agent)`), `at`,
+  `decision` (the recommended option unless `--option`), and leaves the body alone. It asks for confirmation on a
+  terminal and refuses without `--yes` on a non-terminal. It is never run by an agent on its own, and
+  `--delegated` is refused for `charter` and `dismissal` records (never delegated); a `design` or `other` record may be
+  delegated only by an explicit, recorded owner instruction (`policies/autonomy.md`, Owner decisions). Like `approve`
+  it records, it does not lock: the lock is GitHub review (CODEOWNERS on `docs/decisions/`).
+* **Proposing.** `factory decision new "<title>" --type T` scaffolds a proposed draft from `kit/decisions/TEMPLATE.md`
+  (named by `templates.decision` in the manifest, checked by `lint`); the agent writes it and deletes the unfilled
+  line. `docs/decisions/TEMPLATE.md` (create mode, never overwritten) is the same example laid into each project.
+* **Visibility.** `status` prints a "waiting for the owner" block (id, type, age, title, recommended option; nothing
+  when nothing waits); `doctor` gives one WARN per waiting or invalid record; `factory inbox` does the same across the
+  registry's projects that have a local path, reading their `docs/decisions` only (read-only, deterministic order).
+* **Findings.** A dismissal is a `dismissal` record; `factory-findings` applies it only when the record is `accepted`
+  with `by` and `at`, and cites the id in Jira (`policies/findings.md`, Dismissal gate).
 
 ## 4. Golden path
 

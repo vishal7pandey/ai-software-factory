@@ -366,3 +366,30 @@ def test_repo_has_no_registry_dir():
     assert not (root / "registry").exists()
     gi = (root / ".gitignore").read_text(encoding="utf-8")
     assert "registry" not in gi
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "Run `factory decide D-001 --accept` now.",
+        "Then FACTORY DECIDE the record.",
+        "The task: factory decide it.",
+    ],
+)
+def test_decide_instruction_fails(tmp_path, line):
+    put_skill(tmp_path, text=skill_text(extra=f"docs/work/\n{line}\n"))
+    assert has(reasons(tmp_path), "factory decide")
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "Never run `factory decide`.",
+        "Do not run factory decide.",
+        "Ask the owner to run `factory decide D-001`.",
+        "An agent must not run factory decide.",
+    ],
+)
+def test_decide_prohibition_passes(tmp_path, line):
+    put_skill(tmp_path, text=skill_text(extra=f"docs/work/\n{line}\n"))
+    assert reasons(tmp_path) == []

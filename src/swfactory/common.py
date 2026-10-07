@@ -77,6 +77,12 @@ def today() -> str:
     return dt.date.today().isoformat()
 
 
+def ascii_line(text: object, limit: int) -> str:
+    """Printable ASCII only, one line, cut at `limit`: third-party text shown on a console."""
+    s = re.sub(r"\s+", " ", re.sub(r"[^\x20-\x7e]", "?", str(text))).strip()
+    return s if len(s) <= limit else s[: limit - 3].rstrip() + "..."
+
+
 def normalise_newlines(text: str) -> str:
     return text.replace("\r\n", "\n")
 
