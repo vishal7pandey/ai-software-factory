@@ -263,7 +263,9 @@ def evaluate(criterion: object, root: Path | str, jira_status: JiraStatus | None
         return _eval_metric(ref, root)
     if kind == "jira":
         status = jira_status(str(ref)) if jira_status else None
-        return UNKNOWN if status is None else (MET if status == "Done" else NOT_MET)
+        if status is None:
+            return UNKNOWN
+        return MET if status == "Done" else NOT_MET
     return UNKNOWN
 
 

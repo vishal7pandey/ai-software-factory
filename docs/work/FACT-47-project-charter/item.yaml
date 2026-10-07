@@ -2,7 +2,7 @@ id: FACT-47
 type: feature
 title: Project charter
 slug: project-charter
-status: in-review
+status: merged
 risk: medium
 jira: FACT-47
 branch: feature/fact-47-project-charter
