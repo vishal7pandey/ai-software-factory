@@ -219,15 +219,22 @@ def python_versions(ci_text: str | None, pyproject_text: str | None) -> list[str
 
 
 def _folded(command: str, indent: int = 10, width: int = 100) -> list[str]:
-    """`command` wrapped for a YAML folded scalar; quoted strings are never split."""
+    """`command` wrapped for a YAML folded scalar (lines are joined with a space on reading).
+    Quoted strings are never split and an option stays on one line with its value."""
+    units: list[str] = []
+    for token in re.findall(r"""(?:"[^"]*"|'[^']*'|\S)+""", command):
+        if units and not token.startswith("-"):
+            units[-1] += " " + token
+        else:
+            units.append(token)
     lines: list[str] = []
     current = ""
-    for token in re.findall(r"""(?:"[^"]*"|'[^']*'|\S)+""", command):
-        if current and indent + len(current) + 1 + len(token) > width:
+    for unit in units:
+        if current and indent + len(current) + 1 + len(unit) > width:
             lines.append(current)
-            current = token
+            current = unit
         else:
-            current = f"{current} {token}".strip()
+            current = f"{current} {unit}".strip()
     return [" " * indent + ln for ln in [*lines, current]]
 
 

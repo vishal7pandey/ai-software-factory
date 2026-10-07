@@ -231,6 +231,23 @@ def test_the_project_test_command_is_reused_from_an_ade_shaped_ci(tmp_path, caps
     assert "SonarCloud scan" in names and "Check SonarCloud is set up" in names
 
 
+def test_long_commands_wrap_without_separating_an_option_from_its_value(tmp_path):
+    p = make_project(tmp_path, branch="master", origin_head="master")
+    write(p / CI, ADE_CI)
+    assert adopt(p) == 0
+    text = (p / WORKFLOW).read_text(encoding="utf-8")
+    lines = [ln for ln in text.splitlines() if "--deselect" in ln]
+    assert len(lines) >= len(DESELECTS)
+    for ln in lines:
+        assert ln.strip().startswith("--deselect") or " --deselect " in ln
+        assert not ln.rstrip().endswith("--deselect")
+    command = coverage_step(p)["run"]  # folded back into one line
+    assert "\n" not in command and "  " not in command
+    folded = sonar._folded(command)
+    assert " ".join(ln.strip() for ln in folded) == command
+    assert all(len(ln) <= 100 or ln.strip().startswith("--deselect") for ln in folded)
+
+
 @pytest.mark.parametrize(
     ("run", "expected"),
     [
