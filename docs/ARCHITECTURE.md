@@ -300,16 +300,22 @@ Optional code-quality scan for python and node projects; the owner-side steps ar
 * The only substitution the installer makes is `{{project_key}}` in a `create`-mode template: `<owner>_<repo>`
   from the GitHub `origin` remote, else the marked placeholder `REPLACE_ME_OWNER_REPO`. The organisation key
   is the marked placeholder `REPLACE_ME_SONAR_ORGANIZATION` (`installer.SONAR_PLACEHOLDER` is the marker).
-  `adopt` also points a new `sonar.yml` at the default branch.
+  `adopt` and `sync` also fit a NEW file to the project (`swfactory/sonar.py`, FACT-40): the push trigger is the
+  default branch, the python test step is the project's own pytest command from its `ci.yml` (locked runner,
+  coverage added; anything not reusable safely keeps the template step and prints why), and the python version
+  follows its CI. Dependencies come only from the lock; third-party actions are pinned to a commit SHA.
 * The workflow scans on push to the default branch and on same-repository pull requests, with full history,
-  through `SonarSource/sonarqube-scan-action` (major pin) and the `SONAR_TOKEN` Actions secret. Its first
+  through `SonarSource/sonarqube-scan-action` (commit pin) and the `SONAR_TOKEN` Actions secret. Its first
   step, the guard, writes `enabled=false` and exits 0 with a notice when the secret is empty, the properties
   file is missing or a non-comment line holds the marker; every later step waits for `enabled=true`.
 * `doctor <project>` prints `sonar: properties` (marker still there, comment lines ignored) and
   `sonar: SONAR_TOKEN` (`present`, `not set`, `unknown`, or `skipped` without a github.com remote). The secret
   is looked up by name through `harden.gh_api` (`GET repos/{o}/{r}/actions/secrets`, the read behind
   `gh secret list`); no value is read, printed or stored. A project with neither file gets one notice and no
-  call. Sonar lines are never `FAIL`: not set up yet is a notice, an inconsistent state a warning.
+  call. `sonar: server` reads the public SonarCloud API with no token (`sonar.http_get`, whose one network call
+  `_request` the suite replaces): the project exists, is public, and its main branch equals the repository
+  default branch (read through `gh`); a mismatch prints the repair commands. Sonar lines are never `FAIL`:
+  not set up yet is a notice, an inconsistent state a warning, an unreadable one `unknown`.
 * The factory never creates the SonarCloud organisation or project and never sets or reads the token.
 
 ### 3.10 Dependency loop (FACT-39)
